@@ -1,0 +1,23 @@
+package com.walletledger.walletbackend.dto.response;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+
+import com.walletledger.walletbackend.dto.enums.TransactionDirection;
+import com.walletledger.walletbackend.dto.enums.TransactionStatus;
+import com.walletledger.walletbackend.dto.enums.TransactionType;
+
+public record TransactionSummaryResponse(
+        Long id,
+        TransactionType type,
+        TransactionDirection direction,
+        String counterpartyName,
+        BigDecimal amount,
+        String remark,
+        TransactionStatus status,
+        Instant initiatedAt,
+        LocalDate settlementDueDate,
+        Long daysRemaining
+) {
+}

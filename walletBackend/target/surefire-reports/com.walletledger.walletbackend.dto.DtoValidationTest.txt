@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.walletledger.walletbackend.dto.DtoValidationTest
+-------------------------------------------------------------------------------
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.029 s -- in com.walletledger.walletbackend.dto.DtoValidationTest

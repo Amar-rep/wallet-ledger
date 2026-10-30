@@ -1,0 +1,4 @@
+com\walletledger\walletbackend\dto\DtoValidationTest.class
+com\walletledger\walletbackend\entity\NotificationMappingTest.class
+com\walletledger\walletbackend\dto\EnumContractTest.class
+com\walletledger\walletbackend\entity\JpaMappingConstraintTest.class

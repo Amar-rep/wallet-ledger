@@ -31,8 +31,8 @@ public class SettlementBatch {
 
     private OffsetDateTime startedAt;
     private OffsetDateTime endedAt;
-    private Integer settledCount;
-    private Integer failedCount;
-    private Integer declinedCount;
-    private BigDecimal totalAmountSettled;
+    private Integer settledCount = 0;
+    private Integer failedCount = 0;
+    private Integer declinedCount = 0;
+    private BigDecimal totalAmountSettled = BigDecimal.ZERO;
 }

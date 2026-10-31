@@ -1,6 +1,7 @@
 package com.walletledger.walletbackend.service;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -118,7 +119,7 @@ public class AuthService {
         OffsetDateTime now = OffsetDateTime.now();
         if (isCurrentlyLocked(user, now)) {
             recordLoginAttempt(user, email, false, clientIp);
-            long minutesRemaining = java.time.Duration.between(now, user.getLockedAt().plusMinutes(LOCK_MINUTES))
+            long minutesRemaining = Duration.between(now, user.getLockedAt().plusMinutes(LOCK_MINUTES))
                     .toMinutes() + 1;
             throw new BusinessRuleException(HttpStatus.LOCKED,
                     "Account is locked. Try again in " + minutesRemaining + " minute(s)");

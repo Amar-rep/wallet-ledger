@@ -59,7 +59,7 @@ export default function App() {
           >
             <Route path="/admin" element={<AdminDashboardPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
-            <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
+            <Route path="/admin/users/:userId" element={<AdminUserDetailPage />} />
             <Route path="/admin/transactions" element={<AdminTransactionsPage />} />
             <Route path="/admin/transactions/:id" element={<AdminTransactionDetailPage />} />
             <Route path="/admin/settlements" element={<AdminSettlementsPage />} />

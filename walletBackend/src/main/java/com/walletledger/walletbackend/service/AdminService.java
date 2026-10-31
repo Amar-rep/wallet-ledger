@@ -9,6 +9,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.walletledger.walletbackend.dto.common.MessageResponse;
@@ -69,6 +70,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -82,6 +85,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AdminService {
 
+        private static final Logger logger = LoggerFactory.getLogger(AdminService.class);
         private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
         private final FraudAdminService fraudAdminService;
@@ -144,6 +148,7 @@ public class AdminService {
                 return new PageResponse<>(content, result.getNumber(), result.getSize(),
                                 result.getTotalElements(), result.getTotalPages());
         }
+
         public AdminUserDetailResponse userDetail(@PathVariable Long userId) {
                 User user = userRepository.findById(userId)
                                 .orElseThrow(() -> new BusinessRuleException(HttpStatus.NOT_FOUND, "User not found"));
@@ -165,12 +170,14 @@ public class AdminService {
 
                 return new AdminUserDetailResponse(toAdminUserResponse(user), recent);
         }
+
         public MessageResponse freezeWallet(Principal principal, @PathVariable Long userId,
                         @RequestBody(required = false) WalletFreezeRequest ignoredRequest) {
                 walletService.setFrozenByAdmin(userId, true);
                 audit(principal, "FREEZE_WALLET", "WALLET", userId);
                 return new MessageResponse("Wallet frozen");
         }
+
         public MessageResponse unfreezeWallet(Principal principal, @PathVariable Long userId,
                         @RequestBody(required = false) WalletFreezeRequest ignoredRequest) {
                 walletService.setFrozenByAdmin(userId, false);
@@ -218,6 +225,7 @@ public class AdminService {
                 return new PageResponse<>(content, result.getNumber(), result.getSize(),
                                 result.getTotalElements(), result.getTotalPages());
         }
+
         public AdminTransactionDetailResponse transactionDetail(@PathVariable Long id) {
                 Transaction t = transactionRepository.findById(id)
                                 .orElseThrow(() -> new BusinessRuleException(HttpStatus.NOT_FOUND,
@@ -284,6 +292,7 @@ public class AdminService {
         /** Manually settle a single pending transaction immediately. */
         public MessageResponse manualSettle(Principal principal, @PathVariable Long id) {
                 SettlementOutcome outcome = settlementService.settle(id, null);
+
                 audit(principal, "MANUAL_SETTLE", "TRANSACTION", id);
                 return switch (outcome) {
                         case SETTLED -> new MessageResponse("Transaction settled successfully");
@@ -298,6 +307,7 @@ public class AdminService {
                         @RequestParam(defaultValue = "PENDING") FraudAlertStatus status) {
                 return fraudAdminService.list(status);
         }
+
         public FraudAlertResponse reviewFraudAlert(Principal principal, @PathVariable Long alertId,
                         @Valid @RequestBody FraudReviewRequest request) {
                 FraudAlertResponse result = fraudAdminService.review(principal.getName(), alertId, request);
@@ -369,13 +379,17 @@ public class AdminService {
                         log.setAction(action);
                         log.setTargetType(targetType);
                         log.setTargetId(targetId);
+                        log.setDetails(Map.of());
                         log.setCreatedAt(OffsetDateTime.now());
                         if (principal != null) {
                                 userRepository.findByEmail(principal.getName()).ifPresent(log::setAdmin);
                         }
-                        auditLogRepository.save(log);
-                } catch (Exception ignored) {
-                        // audit failures must never break the main operation
+                        auditLogRepository.saveAndFlush(log);
+                } catch (Exception exception) {
+                        // Audit failures must not break the main operation, but must be visible.
+                        logger.error("Failed to persist audit log: action={}, targetType={}, targetId={}, principal={}",
+                                        action, targetType, targetId,
+                                        principal == null ? null : principal.getName(), exception);
                 }
         }
 

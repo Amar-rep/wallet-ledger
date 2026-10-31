@@ -1,5 +1,6 @@
 package com.walletledger.walletbackend.scheduler;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,13 +41,19 @@ public class SettlementJob {
         }
     }
 
-    /** Not transactional: each transfer commits on its own inside SettlementService. */
+    /**
+     * Not transactional: each transfer commits on its own inside SettlementService.
+     */
     JobResult settleDue(ScheduledJobLog jobLog) {
         List<Long> dueIds = transactionRepository.findDueIds(TransactionStatus.PENDING, WalletService.today());
 
         SettlementBatch batch = new SettlementBatch();
         batch.setJobLog(jobLog);
         batch.setStartedAt(OffsetDateTime.now());
+        batch.setSettledCount(0);
+        batch.setFailedCount(0);
+        batch.setDeclinedCount(0);
+        batch.setTotalAmountSettled(BigDecimal.ZERO);
         batch = settlementBatchRepository.save(batch);
 
         int settled = 0;
@@ -57,7 +64,8 @@ public class SettlementJob {
                 switch (settlementService.settle(transactionId, batch.getId())) {
                     case SETTLED -> settled++;
                     case DECLINED -> declined++;
-                    case SKIPPED -> { }
+                    case SKIPPED -> {
+                    }
                 }
             } catch (Exception exception) {
                 failed++;
@@ -77,7 +85,9 @@ public class SettlementJob {
         batch.setFailedCount(failed);
         batch.setDeclinedCount(declined);
         batch.setTotalAmountSettled(
-                transactionRepository.sumSettledInBatch(batch.getId(), TransactionStatus.SUCCESS));
+                java.util.Optional
+                        .ofNullable(transactionRepository.sumSettledInBatch(batch.getId(), TransactionStatus.SUCCESS))
+                        .orElse(BigDecimal.ZERO));
         batch.setEndedAt(OffsetDateTime.now());
         settlementBatchRepository.save(batch);
 

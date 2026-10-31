@@ -1,8 +1,8 @@
 package com.walletledger.walletbackend.entity;
 
 import java.time.OffsetDateTime;
+import java.util.Map;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -13,6 +13,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "audit_log")
@@ -33,8 +35,8 @@ public class AuditLog {
     private String targetType;
     private Long targetId;
 
-    @Column(columnDefinition = "text")
-    private String details;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> details;
 
     private OffsetDateTime createdAt;
 }

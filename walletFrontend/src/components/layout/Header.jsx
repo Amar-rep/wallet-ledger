@@ -59,6 +59,7 @@ export default function Header({ onMenuClick }) {
 
   function handleLogout() {
     logout()
+    qc.clear()
     navigate('/login')
   }
 

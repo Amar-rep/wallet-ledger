@@ -23,6 +23,7 @@ import com.walletledger.walletbackend.dto.enums.WalletKind;
 import com.walletledger.walletbackend.dto.enums.WalletStatus;
 import com.walletledger.walletbackend.entity.FlexCredit;
 import com.walletledger.walletbackend.entity.Transaction;
+import com.walletledger.walletbackend.entity.User;
 import com.walletledger.walletbackend.entity.Wallet;
 import com.walletledger.walletbackend.exception.BusinessRuleException;
 import com.walletledger.walletbackend.repository.FlexCreditRepository;
@@ -40,6 +41,7 @@ class FlexServiceTest {
     private LedgerEntryRepository ledgerEntries;
     private WalletRepository wallets;
     private WalletLockService locks;
+    private NotificationService notifications;
     private FlexService service;
 
     @BeforeEach
@@ -52,7 +54,8 @@ class FlexServiceTest {
         ledgerEntries = mock(LedgerEntryRepository.class);
         wallets = mock(WalletRepository.class);
         locks = mock(WalletLockService.class);
-        service = new FlexService(properties, flexCredits, ledgerEntries, wallets, locks);
+        notifications = mock(NotificationService.class);
+        service = new FlexService(properties, flexCredits, ledgerEntries, wallets, locks, notifications);
     }
 
     @ParameterizedTest
@@ -454,8 +457,11 @@ class FlexServiceTest {
     }
 
     private static Wallet wallet(Long id, BigDecimal balance) {
+        User user = new User();
+        user.setId(id * 100); // distinct user ID per wallet
         Wallet wallet = new Wallet();
         wallet.setId(id);
+        wallet.setUser(user);
         wallet.setBalance(balance);
         wallet.setStatus(WalletStatus.ACTIVE);
         wallet.setWalletKind(WalletKind.CUSTOMER);

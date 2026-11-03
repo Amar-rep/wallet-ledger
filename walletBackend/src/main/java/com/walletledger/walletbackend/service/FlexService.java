@@ -1,6 +1,7 @@
 package com.walletledger.walletbackend.service;
 
 import java.math.BigDecimal;
+import java.text.NumberFormat;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,8 @@ import java.util.Optional;
 import com.walletledger.walletbackend.config.FlexProperties;
 import com.walletledger.walletbackend.dto.enums.FlexCreditStatus;
 import com.walletledger.walletbackend.dto.enums.LedgerEntryType;
+import com.walletledger.walletbackend.dto.enums.NotificationSeverity;
+import com.walletledger.walletbackend.dto.enums.NotificationType;
 import com.walletledger.walletbackend.dto.enums.WalletKind;
 import com.walletledger.walletbackend.entity.FlexCredit;
 import com.walletledger.walletbackend.entity.LedgerEntry;
@@ -37,6 +40,7 @@ public class FlexService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final WalletRepository walletRepository;
     private final WalletLockService walletLockService;
+    private final NotificationService notificationService;
 
     // ── Eligibility ────────────────────────────────────────────────────────────
 
@@ -226,6 +230,23 @@ public class FlexService {
             walletRepository.save(beneficiaryWallet);
         }
         flexCreditRepository.save(flex);
+
+        // Notify the receiver about what was taken and what they owe
+        Long receiverUserId = beneficiaryWallet.getUser().getId();
+        if (outstanding.compareTo(BigDecimal.ZERO) == 0) {
+            notificationService.notifyUser(receiverUserId, NotificationType.FLEX_RECOVERY,
+                    NotificationSeverity.INFO,
+                    money(recovered) + " was recovered from your wallet to settle a Flex Instant Credit "
+                            + "that could not be completed.",
+                    transaction);
+        } else {
+            notificationService.notifyUser(receiverUserId, NotificationType.FLEX_RECOVERY,
+                    NotificationSeverity.CRITICAL,
+                    money(recovered) + " was recovered from your wallet for a failed Flex credit. "
+                            + "You still owe " + money(outstanding)
+                            + ", which will be deducted automatically from your next incoming transfer.",
+                    transaction);
+        }
     }
 
     // ── Debt repayment from later inbound funds ────────────────────────────────
@@ -272,6 +293,23 @@ public class FlexService {
 
         // Apply repayment to RECOVERING Flex records oldest-first
         applyRepaymentToFlexRecords(wallet.getId(), repayment, transaction);
+
+        // Notify the receiver that repayment was deducted from their inbound transfer
+        Long receiverUserId = wallet.getUser().getId();
+        BigDecimal remainingDebt = debt.subtract(repayment);
+        if (remainingDebt.compareTo(BigDecimal.ZERO) == 0) {
+            notificationService.notifyUser(receiverUserId, NotificationType.FLEX_DEBT_REPAID,
+                    NotificationSeverity.INFO,
+                    money(repayment) + " was automatically deducted from your incoming transfer "
+                            + "to clear your outstanding Flex debt. Your Flex debt is now cleared.",
+                    transaction);
+        } else {
+            notificationService.notifyUser(receiverUserId, NotificationType.FLEX_DEBT_REPAID,
+                    NotificationSeverity.INFO,
+                    money(repayment) + " was automatically deducted from your incoming transfer "
+                            + "towards your Flex debt. Remaining debt: " + money(remainingDebt) + ".",
+                    transaction);
+        }
 
         return customerCredit;
     }
@@ -372,5 +410,13 @@ public class FlexService {
         entry.setBalanceAfter(balanceAfter);
         entry.setCreatedAt(OffsetDateTime.now());
         ledgerEntryRepository.save(entry);
+    }
+
+    private String money(BigDecimal amount) {
+        NumberFormat fmt = NumberFormat
+                .getCurrencyInstance(java.util.Locale.forLanguageTag("en-IN"));
+        fmt.setMinimumFractionDigits(2);
+        fmt.setMaximumFractionDigits(2);
+        return fmt.format(amount);
     }
 }

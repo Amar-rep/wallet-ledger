@@ -15,25 +15,21 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AccountUnlockService {
 
-    private static final int LOCK_MINUTES = 30;
+	private static final int LOCK_MINUTES = 30;
 
-    private final UserRepository userRepository;
-    private final NotificationService notificationService;
+	private final UserRepository userRepository;
+	private final NotificationService notificationService;
 
-    @Transactional
-    public int unlockExpired() {
-        OffsetDateTime cutoff = OffsetDateTime.now().minusMinutes(LOCK_MINUTES);
-        List<User> users = userRepository.findByLockedAtLessThanEqual(cutoff);
-        for (User user : users) {
-            user.setLockedAt(null);
-            user.setFailedLoginCount(0);
-            notificationService.notifyUser(
-                    user.getId(),
-                    NotificationType.ACCOUNT_UNLOCKED,
-                    NotificationSeverity.INFO,
-                    "Your account has been automatically unlocked",
-                    null);
-        }
-        return users.size();
-    }
+	@Transactional
+	public int unlockExpired() {
+		OffsetDateTime cutoff = OffsetDateTime.now().minusMinutes(LOCK_MINUTES);
+		List<User> users = userRepository.findByLockedAtLessThanEqual(cutoff);
+		for (User user : users) {
+			user.setLockedAt(null);
+			user.setFailedLoginCount(0);
+			notificationService.notifyUser(user.getId(), NotificationType.ACCOUNT_UNLOCKED, NotificationSeverity.INFO,
+					"Your account has been automatically unlocked", null);
+		}
+		return users.size();
+	}
 }

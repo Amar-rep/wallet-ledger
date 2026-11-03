@@ -10,5 +10,7 @@ public enum NotificationType {
     FRAUD_ALERT,
     ACCOUNT_LOCKED,
     ACCOUNT_UNLOCKED,
-    RECON_MISMATCH
+    RECON_MISMATCH,
+    FLEX_RECOVERY,
+    FLEX_DEBT_REPAID
 }

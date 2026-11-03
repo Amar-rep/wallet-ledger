@@ -2,6 +2,7 @@ package com.walletledger.walletbackend.controller;
 
 import java.security.Principal;
 
+import com.walletledger.walletbackend.dto.common.MessageResponse;
 import com.walletledger.walletbackend.dto.request.AddMoneyRequest;
 import com.walletledger.walletbackend.dto.request.WalletStatusRequest;
 import com.walletledger.walletbackend.dto.response.WalletResponse;
@@ -35,5 +36,11 @@ public class WalletController {
     @PatchMapping("/status")
     public WalletResponse updateStatus(Principal principal, @Valid @RequestBody WalletStatusRequest request) {
         return walletService.setOwnStatus(principal.getName(), request.status());
+    }
+
+    /** Toggle Flex Instant Credit opt-in for the current user's wallet. */
+    @PostMapping("/flex/toggle")
+    public MessageResponse toggleFlex(Principal principal) {
+        return walletService.toggleFlex(principal.getName());
     }
 }

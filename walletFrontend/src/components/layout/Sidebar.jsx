@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   Home, Send, List, Bell, Settings, Shield, Users, BarChart2, Layers, AlertTriangle,
-  Activity, ClipboardList, UserPlus, X,
+  Activity, ClipboardList, UserPlus, Zap, X, CalendarDays,
 } from 'lucide-react'
 import { useAuth } from '../../features/auth/AuthContext.jsx'
 
@@ -9,6 +9,7 @@ const userNav = [
   { to: '/', label: 'Home', icon: Home, end: true },
   { to: '/send', label: 'Send Money', icon: Send },
   { to: '/transactions', label: 'Transactions', icon: List },
+  { to: '/flex', label: 'Flex Credit', icon: Zap },
   { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/wallet/settings', label: 'Wallet Settings', icon: Settings },
 ]
@@ -19,7 +20,9 @@ const adminNav = [
   { to: '/admin/transactions', label: 'Transactions', icon: List },
   { to: '/admin/settlements', label: 'Settlements', icon: Layers },
   { to: '/admin/fraud', label: 'Fraud Review', icon: AlertTriangle },
+  { to: '/admin/flex', label: 'Flex Credits', icon: Zap },
   { to: '/admin/jobs', label: 'Job Monitor', icon: Activity },
+  { to: '/admin/daily-summary', label: 'Daily Summary', icon: CalendarDays },
   { to: '/admin/reconciliation', label: 'Reconciliation', icon: ClipboardList },
 ]
 

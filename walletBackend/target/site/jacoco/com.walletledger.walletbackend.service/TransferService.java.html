@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TransferService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.service</a> &gt; <span class="el_source">TransferService.java</span></div><h1>TransferService.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.service;
+
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import java.util.Optional;
+
+import com.walletledger.walletbackend.dto.enums.FraudAlertStatus;
+import com.walletledger.walletbackend.dto.enums.FraudAlertType;
+import com.walletledger.walletbackend.dto.enums.LedgerEntryType;
+import com.walletledger.walletbackend.dto.enums.NotificationSeverity;
+import com.walletledger.walletbackend.dto.enums.NotificationType;
+import com.walletledger.walletbackend.dto.enums.TransactionStatus;
+import com.walletledger.walletbackend.dto.enums.TransactionType;
+import com.walletledger.walletbackend.dto.request.SendMoneyRequest;
+import com.walletledger.walletbackend.dto.response.TransferResponse;
+import com.walletledger.walletbackend.dto.response.UserSearchResponse;
+import com.walletledger.walletbackend.entity.FraudAlert;
+import com.walletledger.walletbackend.entity.LedgerEntry;
+import com.walletledger.walletbackend.entity.Transaction;
+import com.walletledger.walletbackend.entity.User;
+import com.walletledger.walletbackend.entity.Wallet;
+import com.walletledger.walletbackend.exception.BusinessRuleException;
+import com.walletledger.walletbackend.repository.FraudAlertRepository;
+import com.walletledger.walletbackend.repository.LedgerEntryRepository;
+import com.walletledger.walletbackend.repository.TransactionRepository;
+import com.walletledger.walletbackend.repository.UserRepository;
+import com.walletledger.walletbackend.repository.WalletRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class TransferService {
+
+<span class="fc" id="L42">        private static final BigDecimal DAILY_LIMIT = new BigDecimal(&quot;50000.00&quot;);</span>
+<span class="fc" id="L43">        private static final BigDecimal HIGH_VALUE_THRESHOLD = new BigDecimal(&quot;8000.00&quot;);</span>
+        private static final int DUPLICATE_WINDOW_MINUTES = 2;
+        private static final int SETTLEMENT_DAYS = 3;
+<span class="fc" id="L46">        private static final DateTimeFormatter SETTLEMENT_DATE_FORMAT = DateTimeFormatter.ofPattern(&quot;MMM d&quot;);</span>
+
+        private final UserRepository userRepository;
+        private final WalletRepository walletRepository;
+        private final TransactionRepository transactionRepository;
+        private final LedgerEntryRepository ledgerEntryRepository;
+        private final FraudAlertRepository fraudAlertRepository;
+        private final NotificationService notificationService;
+        private final PasswordEncoder passwordEncoder;
+        private final FlexService flexService;
+
+        @Transactional(readOnly = true)
+        public UserSearchResponse search(String currentUserEmail, String query) {
+<span class="fc bfc" id="L59" title="All 2 branches covered.">                String normalizedQuery = query == null ? &quot;&quot; : query.trim();</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">                if (normalizedQuery.isEmpty()) {</span>
+<span class="fc" id="L61">                        throw new BusinessRuleException(HttpStatus.BAD_REQUEST,</span>
+<span class="fc" id="L62">                                        &quot;Enter an email address or phone number&quot;);</span>
+                }
+
+<span class="fc bfc" id="L65" title="All 2 branches covered.">                User user = (normalizedQuery.contains(&quot;@&quot;)</span>
+<span class="fc" id="L66">                                ? userRepository.findByEmail(normalizedQuery.toLowerCase())</span>
+<span class="fc" id="L67">                                : userRepository.findByPhone(normalizedQuery))</span>
+<span class="fc" id="L68">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND, &quot;No user found&quot;));</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">                if (user.getEmail().equalsIgnoreCase(currentUserEmail)) {</span>
+<span class="fc" id="L70">                        throw new BusinessRuleException(HttpStatus.BAD_REQUEST, &quot;You cannot send money to yourself&quot;);</span>
+                }
+<span class="fc" id="L72">                return new UserSearchResponse(user.getId(), user.getName(), user.getPhone(), user.getEmail());</span>
+        }
+
+        /**
+         * Fraud rejections are deliberately committed so the alert and its
+         * notifications are retained.
+         * All balance mutations occur after those checks, so a rejected request cannot
+         * debit the sender.
+         */
+        @Transactional(noRollbackFor = BusinessRuleException.class)
+        public TransferResponse sendMoney(String email, SendMoneyRequest request) {
+<span class="fc" id="L83">                User sender = userRepository.findByEmail(email)</span>
+<span class="fc" id="L84">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.UNAUTHORIZED,</span>
+<span class="fc" id="L85">                                                &quot;User not found&quot;));</span>
+<span class="fc" id="L86">                Wallet senderWallet = walletRepository.findByUserIdForUpdate(sender.getId())</span>
+<span class="pc" id="L87">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND,</span>
+<span class="nc" id="L88">                                                &quot;Sender wallet not found&quot;));</span>
+
+<span class="fc" id="L90">                Optional&lt;Transaction&gt; existing = transactionRepository</span>
+<span class="fc" id="L91">                                .findBySenderWalletIdAndRequestId(senderWallet.getId(), request.requestId());</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">                if (existing.isPresent()) {</span>
+<span class="fc" id="L93">                        return toResponse(existing.get(), &quot;Duplicate request. Returning the original result&quot;);</span>
+                }
+
+<span class="fc bfc" id="L96" title="All 2 branches covered.">                if (!passwordEncoder.matches(request.pin(), sender.getPinHash())) {</span>
+<span class="fc" id="L97">                        throw new BusinessRuleException(HttpStatus.BAD_REQUEST, &quot;Invalid transaction PIN&quot;);</span>
+                }
+<span class="fc" id="L99">                WalletService.requireActive(senderWallet, &quot;send money from&quot;);</span>
+<span class="fc" id="L100">                WalletService.resetDailySpentIfNeeded(senderWallet);</span>
+
+<span class="fc bfc" id="L102" title="All 2 branches covered.">                if (request.receiverUserId().equals(sender.getId())) {</span>
+<span class="fc" id="L103">                        throw new BusinessRuleException(HttpStatus.BAD_REQUEST, &quot;You cannot send money to yourself&quot;);</span>
+                }
+<span class="fc" id="L105">                User receiver = userRepository.findById(request.receiverUserId())</span>
+<span class="fc" id="L106">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND,</span>
+<span class="fc" id="L107">                                                &quot;Recipient not found&quot;));</span>
+<span class="fc" id="L108">                Wallet receiverWallet = walletRepository.findByUserId(receiver.getId())</span>
+<span class="fc" id="L109">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND,</span>
+<span class="fc" id="L110">                                                &quot;Recipient wallet not found&quot;));</span>
+
+<span class="fc" id="L112">                BigDecimal amount = request.amount();</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">                if (senderWallet.getBalance().compareTo(amount) &lt; 0) {</span>
+<span class="fc" id="L114">                        throw new BusinessRuleException(HttpStatus.UNPROCESSABLE_ENTITY, &quot;Insufficient balance&quot;);</span>
+                }
+<span class="fc bfc" id="L116" title="All 2 branches covered.">                if (senderWallet.getDailySpent().add(amount).compareTo(DAILY_LIMIT) &gt; 0) {</span>
+<span class="fc" id="L117">                        throw blocked(sender, receiver, amount, FraudAlertType.DAILY_LIMIT,</span>
+<span class="fc" id="L118">                                        &quot;Daily limit of &quot; + money(DAILY_LIMIT) + &quot; would be exceeded&quot;,</span>
+<span class="fc" id="L119">                                        &quot;Transaction blocked: daily limit exceeded&quot;);</span>
+                }
+<span class="fc" id="L121">                OffsetDateTime duplicateWindowStart = OffsetDateTime.now().minusMinutes(DUPLICATE_WINDOW_MINUTES);</span>
+<span class="fc" id="L122">                if (transactionRepository.existsBySenderWalletIdAndReceiverWalletIdAndAmountAndInitiatedAtAfter(</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">                                senderWallet.getId(), receiverWallet.getId(), amount, duplicateWindowStart)) {</span>
+<span class="fc" id="L124">                        throw blocked(sender, receiver, amount, FraudAlertType.DUPLICATE,</span>
+<span class="fc" id="L125">                                        &quot;Same amount to the same recipient within &quot; + DUPLICATE_WINDOW_MINUTES</span>
+                                                        + &quot; minutes&quot;,
+<span class="fc" id="L127">                                        &quot;Transaction blocked: possible duplicate transaction&quot;);</span>
+                }
+
+<span class="fc" id="L130">                OffsetDateTime now = OffsetDateTime.now();</span>
+<span class="fc" id="L131">                senderWallet.setBalance(senderWallet.getBalance().subtract(amount));</span>
+<span class="fc" id="L132">                senderWallet.setDailySpent(senderWallet.getDailySpent().add(amount));</span>
+<span class="fc" id="L133">                senderWallet.setUpdatedAt(now);</span>
+<span class="fc" id="L134">                walletRepository.save(senderWallet);</span>
+
+<span class="fc" id="L136">                Transaction transaction = new Transaction();</span>
+<span class="fc" id="L137">                transaction.setRequestId(request.requestId());</span>
+<span class="fc" id="L138">                transaction.setType(TransactionType.TRANSFER);</span>
+<span class="fc" id="L139">                transaction.setSenderWallet(senderWallet);</span>
+<span class="fc" id="L140">                transaction.setReceiverWallet(receiverWallet);</span>
+<span class="fc" id="L141">                transaction.setAmount(amount);</span>
+<span class="fc" id="L142">                transaction.setRemark(request.remark());</span>
+<span class="fc" id="L143">                transaction.setStatus(TransactionStatus.PENDING);</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">                transaction.setFlagged(amount.compareTo(HIGH_VALUE_THRESHOLD) &gt; 0);</span>
+<span class="fc" id="L145">                transaction.setInitiatedAt(now);</span>
+                // transaction.setSettlementDueDate(LocalDate.now());
+                // System.out.println(LocalDate.now());
+<span class="fc" id="L148">                transaction.setSettlementDueDate(WalletService.today().plusDays(SETTLEMENT_DAYS));</span>
+<span class="fc" id="L149">                transactionRepository.save(transaction);</span>
+
+<span class="fc" id="L151">                saveLedger(transaction, senderWallet, LedgerEntryType.DEBIT, amount, senderWallet.getBalance());</span>
+<span class="fc" id="L152">                notificationService.notifyUser(sender.getId(), NotificationType.TRANSFER_INITIATED,</span>
+<span class="fc" id="L153">                                NotificationSeverity.INFO,</span>
+<span class="fc" id="L154">                                money(amount) + &quot; transfer to &quot; + receiver.getName()</span>
+                                                + &quot; initiated. Expected settlement: &quot;
+<span class="fc" id="L156">                                                + transaction.getSettlementDueDate().format(SETTLEMENT_DATE_FORMAT),</span>
+<span class="fc" id="L157">                                transaction);</span>
+
+<span class="fc bfc" id="L159" title="All 2 branches covered.">                if (Boolean.TRUE.equals(transaction.getFlagged())) {</span>
+<span class="fc" id="L160">                        FraudAlert alert = newAlert(sender, receiver, amount, FraudAlertType.HIGH_VALUE,</span>
+<span class="fc" id="L161">                                        &quot;Transaction above &quot; + money(HIGH_VALUE_THRESHOLD));</span>
+<span class="fc" id="L162">                        alert.setTransaction(transaction);</span>
+<span class="fc" id="L163">                        fraudAlertRepository.save(alert);</span>
+<span class="fc" id="L164">                        notificationService.notifyAdmins(NotificationType.FRAUD_ALERT, NotificationSeverity.INFO,</span>
+<span class="fc" id="L165">                                        &quot;High-value transaction flagged: &quot; + money(amount) + &quot; by user #&quot;</span>
+<span class="fc" id="L166">                                                        + sender.getId(),</span>
+<span class="fc" id="L167">                                        transaction);</span>
+                }
+
+                // Flex Instant Credit — attempt disbursement in the same transaction
+<span class="fc bfc" id="L171" title="All 2 branches covered.">                if (flexService.isEligible(receiverWallet, amount, Boolean.TRUE.equals(transaction.getFlagged()))) {</span>
+<span class="fc" id="L172">                        flexService.disburse(transaction, senderWallet, receiverWallet);</span>
+<span class="fc" id="L173">                        notificationService.notifyUser(receiver.getId(), NotificationType.TRANSFER_INITIATED,</span>
+<span class="fc" id="L174">                                        NotificationSeverity.INFO,</span>
+<span class="fc" id="L175">                                        money(amount) + &quot; from &quot; + sender.getName()</span>
+                                                        + &quot; is available now via Flex Instant Credit.&quot;,
+<span class="fc" id="L177">                                        transaction);</span>
+                }
+
+<span class="fc" id="L180">                return toResponse(transaction,</span>
+<span class="fc" id="L181">                                &quot;Transfer initiated. Expected settlement on &quot; + transaction.getSettlementDueDate());</span>
+        }
+
+        private BusinessRuleException blocked(User sender, User receiver, BigDecimal amount, FraudAlertType type,
+                        String description, String userMessage) {
+<span class="fc" id="L186">                fraudAlertRepository.save(newAlert(sender, receiver, amount, type, description));</span>
+<span class="fc" id="L187">                notificationService.notifyUser(sender.getId(), NotificationType.TXN_BLOCKED, NotificationSeverity.INFO,</span>
+<span class="fc" id="L188">                                userMessage, null);</span>
+<span class="fc" id="L189">                notificationService.notifyAdmins(NotificationType.FRAUD_ALERT, NotificationSeverity.INFO,</span>
+<span class="fc" id="L190">                                type + &quot; alert: &quot; + money(amount) + &quot; by user #&quot; + sender.getId(), null);</span>
+<span class="fc" id="L191">                return new BusinessRuleException(HttpStatus.UNPROCESSABLE_ENTITY, userMessage);</span>
+        }
+
+        private FraudAlert newAlert(User sender, User receiver, BigDecimal amount, FraudAlertType type,
+                        String description) {
+<span class="fc" id="L196">                FraudAlert alert = new FraudAlert();</span>
+<span class="fc" id="L197">                alert.setUser(sender);</span>
+<span class="fc" id="L198">                alert.setReceiverUser(receiver);</span>
+<span class="fc" id="L199">                alert.setAlertType(type);</span>
+<span class="fc" id="L200">                alert.setAmount(amount);</span>
+<span class="fc" id="L201">                alert.setDescription(description);</span>
+<span class="fc" id="L202">                alert.setStatus(FraudAlertStatus.PENDING);</span>
+<span class="fc" id="L203">                alert.setCreatedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L204">                return alert;</span>
+        }
+
+        private void saveLedger(Transaction transaction, Wallet wallet, LedgerEntryType type,
+                        BigDecimal amount, BigDecimal balanceAfter) {
+<span class="fc" id="L209">                LedgerEntry entry = new LedgerEntry();</span>
+<span class="fc" id="L210">                entry.setTransaction(transaction);</span>
+<span class="fc" id="L211">                entry.setWallet(wallet);</span>
+<span class="fc" id="L212">                entry.setEntryType(type);</span>
+<span class="fc" id="L213">                entry.setAmount(amount);</span>
+<span class="fc" id="L214">                entry.setBalanceAfter(balanceAfter);</span>
+<span class="fc" id="L215">                entry.setCreatedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L216">                ledgerEntryRepository.save(entry);</span>
+<span class="fc" id="L217">        }</span>
+
+        private TransferResponse toResponse(Transaction transaction, String message) {
+<span class="fc" id="L220">                return new TransferResponse(transaction.getId(), transaction.getRequestId(), transaction.getStatus(),</span>
+<span class="fc" id="L221">                                transaction.getAmount(), transaction.getReceiverWallet().getUser().getName(),</span>
+<span class="fc" id="L222">                                transaction.getSettlementDueDate(), message);</span>
+        }
+
+        private String money(BigDecimal amount) {
+<span class="fc" id="L226">                NumberFormat formatter = NumberFormat.getCurrencyInstance(</span>
+<span class="fc" id="L227">                                Locale.forLanguageTag(&quot;en-IN&quot;));</span>
+
+<span class="fc" id="L229">                formatter.setMinimumFractionDigits(2);</span>
+<span class="fc" id="L230">                formatter.setMaximumFractionDigits(2);</span>
+
+<span class="fc" id="L232">                return formatter.format(amount);</span>
+        }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

@@ -17,7 +17,7 @@ async function request(path, options = {}) {
     const message =
       data.message ||
       (data.fieldErrors ? Object.values(data.fieldErrors).join(' • ') : null) ||
-      `HTTP ${res.status}`
+      'Something went wrong. Please try again.'
     throw new Error(message)
   }
 

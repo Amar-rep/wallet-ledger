@@ -1,12 +1,12 @@
 package com.walletledger.walletbackend.service;
 
 import java.math.BigDecimal;
+import java.text.NumberFormat;
 import java.time.OffsetDateTime;
-import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.TreeSet;
 
+import com.walletledger.walletbackend.config.FlexProperties;
 import com.walletledger.walletbackend.dto.enums.LedgerEntryType;
 import com.walletledger.walletbackend.dto.enums.NotificationSeverity;
 import com.walletledger.walletbackend.dto.enums.NotificationType;
@@ -30,138 +30,198 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SettlementService {
 
-    private final TransactionRepository transactionRepository;
-    private final WalletRepository walletRepository;
-    private final LedgerEntryRepository ledgerEntryRepository;
-    private final NotificationService notificationService;
-    private final SettlementBatchRepository settlementBatchRepository;
+        private final TransactionRepository transactionRepository;
+        private final WalletRepository walletRepository;
+        private final LedgerEntryRepository ledgerEntryRepository;
+        private final NotificationService notificationService;
+        private final SettlementBatchRepository settlementBatchRepository;
+        private final WalletLockService walletLockService;
+        private final FlexService flexService;
+        private final FlexProperties flexProperties;
 
-    /** Each transaction settles in its own database transaction, isolating failures in a batch. */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public SettlementOutcome settle(Long transactionId, Long batchId) {
-        Transaction transaction = getTransactionForUpdate(transactionId);
-        if (transaction.getStatus() != TransactionStatus.PENDING) {
-            return SettlementOutcome.SKIPPED;
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public SettlementOutcome settle(Long transactionId, Long batchId) {
+                Transaction transaction = getTransactionForUpdate(transactionId);
+                if (transaction.getStatus() != TransactionStatus.PENDING) {
+                        return SettlementOutcome.SKIPPED;
+                }
+                attachBatch(transaction, batchId);
+
+                // Lock sender, receiver — and system wallet if Flex is enabled — in ascending
+                // order
+                Long senderId = transaction.getSenderWallet().getId();
+                Long receiverId = transaction.getReceiverWallet().getId();
+                Map<Long, Wallet> wallets = flexProperties.isEnabled()
+                                ? walletLockService.lockInOrder(senderId, receiverId,
+                                                flexProperties.getSystemWalletId())
+                                : walletLockService.lockInOrder(senderId, receiverId);
+
+                Wallet sender = wallets.get(senderId);
+                Wallet receiver = wallets.get(receiverId);
+
+                if (receiver.getStatus() != WalletStatus.ACTIVE) {
+                        Wallet systemWallet = flexProperties.isEnabled()
+                                        ? wallets.get(flexProperties.getSystemWalletId())
+                                        : null;
+                        if (systemWallet != null) {
+                                flexService.recoverOnFailure(transaction, receiver, systemWallet);
+                        }
+                        refundAndClose(transaction, sender, TransactionStatus.DECLINED,
+                                        "Receiver wallet is " + receiver.getStatus().name().toLowerCase());
+                        return SettlementOutcome.DECLINED;
+                }
+
+                // If Flex was used, repay system wallet instead of crediting receiver again
+                if (flexProperties.isEnabled()) {
+                        Wallet systemWallet = wallets.get(flexProperties.getSystemWalletId());
+                        boolean flexRepaid = flexService.repayOnSettlement(transaction, systemWallet);
+                        if (!flexRepaid) {
+                                // No Flex — normal credit path with debt repayment if any
+                                creditReceiver(transaction, receiver);
+                        }
+                } else {
+                        creditReceiver(transaction, receiver);
+                }
+
+                transaction.setStatus(TransactionStatus.SUCCESS);
+                transaction.setSettledAt(OffsetDateTime.now());
+                transactionRepository.save(transaction);
+
+                notificationService.notifyUser(sender.getUser().getId(), NotificationType.TRANSFER_SETTLED,
+                                NotificationSeverity.INFO, money(transaction.getAmount()) + " transfer to "
+                                                + receiver.getUser().getName() + " has settled",
+                                transaction);
+                notificationService.notifyUser(receiver.getUser().getId(), NotificationType.TRANSFER_RECEIVED,
+                                NotificationSeverity.INFO, money(transaction.getAmount()) + " received from "
+                                                + sender.getUser().getName(),
+                                transaction);
+                return SettlementOutcome.SETTLED;
         }
-        attachBatch(transaction, batchId);
 
-        Map<Long, Wallet> wallets = lockWallets(
-                transaction.getSenderWallet().getId(), transaction.getReceiverWallet().getId());
-        Wallet sender = wallets.get(transaction.getSenderWallet().getId());
-        Wallet receiver = wallets.get(transaction.getReceiverWallet().getId());
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public void fail(Long transactionId, String reason, Long batchId) {
+                Transaction transaction = getTransactionForUpdate(transactionId);
+                if (transaction.getStatus() != TransactionStatus.PENDING)
+                        return;
+                attachBatch(transaction, batchId);
 
-        if (receiver.getStatus() != WalletStatus.ACTIVE) {
-            refundAndClose(transaction, sender, TransactionStatus.DECLINED,
-                    "Receiver wallet is " + receiver.getStatus().name().toLowerCase());
-            return SettlementOutcome.DECLINED;
+                Long senderId = transaction.getSenderWallet().getId();
+                Long receiverId = transaction.getReceiverWallet().getId();
+                Map<Long, Wallet> wallets = flexProperties.isEnabled()
+                                ? walletLockService.lockInOrder(senderId, receiverId,
+                                                flexProperties.getSystemWalletId())
+                                : walletLockService.lockInOrder(senderId);
+
+                Wallet sender = wallets.get(senderId);
+                if (flexProperties.isEnabled()) {
+                        Wallet receiver = wallets.get(receiverId);
+                        Wallet systemWallet = wallets.get(flexProperties.getSystemWalletId());
+                        flexService.recoverOnFailure(transaction, receiver, systemWallet);
+                }
+                refundAndClose(transaction, sender, TransactionStatus.FAILED, reason);
         }
 
-        receiver.setBalance(receiver.getBalance().add(transaction.getAmount()));
-        receiver.setUpdatedAt(OffsetDateTime.now());
-        walletRepository.save(receiver);
-        saveLedger(transaction, receiver, LedgerEntryType.CREDIT, transaction.getAmount(), receiver.getBalance());
+        @Transactional
+        public void blockByAdmin(Long transactionId) {
+                Transaction transaction = getTransactionForUpdate(transactionId);
+                if (transaction.getStatus() != TransactionStatus.PENDING) {
+                        throw new BusinessRuleException(HttpStatus.CONFLICT,
+                                        "Transaction is already " + transaction.getStatus()
+                                                        + " and can no longer be blocked");
+                }
 
-        transaction.setStatus(TransactionStatus.SUCCESS);
-        transaction.setSettledAt(OffsetDateTime.now());
-        transactionRepository.save(transaction);
+                Long senderId = transaction.getSenderWallet().getId();
+                Long receiverId = transaction.getReceiverWallet().getId();
+                Map<Long, Wallet> wallets = flexProperties.isEnabled()
+                                ? walletLockService.lockInOrder(senderId, receiverId,
+                                                flexProperties.getSystemWalletId())
+                                : walletLockService.lockInOrder(senderId);
 
-        notificationService.notifyUser(sender.getUser().getId(), NotificationType.TRANSFER_SETTLED,
-                NotificationSeverity.INFO, money(transaction.getAmount()) + " transfer to "
-                        + receiver.getUser().getName() + " has settled", transaction);
-        notificationService.notifyUser(receiver.getUser().getId(), NotificationType.TRANSFER_RECEIVED,
-                NotificationSeverity.INFO, money(transaction.getAmount()) + " received from "
-                        + sender.getUser().getName(), transaction);
-        return SettlementOutcome.SETTLED;
-    }
-
-    /** Marks an unresolved settlement as failed and restores the sender's available balance. */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void fail(Long transactionId, String reason, Long batchId) {
-        Transaction transaction = getTransactionForUpdate(transactionId);
-        if (transaction.getStatus() != TransactionStatus.PENDING) {
-            return;
+                Wallet sender = wallets.get(senderId);
+                if (flexProperties.isEnabled()) {
+                        Wallet receiver = wallets.get(receiverId);
+                        Wallet systemWallet = wallets.get(flexProperties.getSystemWalletId());
+                        flexService.recoverOnFailure(transaction, receiver, systemWallet);
+                }
+                refundAndClose(transaction, sender, TransactionStatus.FAILED, "Blocked by admin");
+                notificationService.notifyUser(transaction.getReceiverWallet().getUser().getId(),
+                                NotificationType.TRANSFER_FAILED, NotificationSeverity.INFO,
+                                "A transfer of " + money(transaction.getAmount()) + " to you was cancelled",
+                                transaction);
         }
-        attachBatch(transaction, batchId);
-        Wallet sender = lockWallets(transaction.getSenderWallet().getId())
-                .get(transaction.getSenderWallet().getId());
-        refundAndClose(transaction, sender, TransactionStatus.FAILED, reason);
-    }
 
-    /** Admin review blocks only a still-pending high-value transfer. */
-    @Transactional
-    public void blockByAdmin(Long transactionId) {
-        Transaction transaction = getTransactionForUpdate(transactionId);
-        if (transaction.getStatus() != TransactionStatus.PENDING) {
-            throw new BusinessRuleException(HttpStatus.CONFLICT,
-                    "Transaction is already " + transaction.getStatus() + " and can no longer be blocked");
+        // ── Private helpers ───────────────────────────────────────────────────────
+
+        private void creditReceiver(Transaction transaction, Wallet receiver) {
+                BigDecimal amount = transaction.getAmount();
+
+                // Repay any flex debt from this inbound credit before crediting the remainder
+                BigDecimal net = flexProperties.isEnabled()
+                                ? flexService.repayDebtFromInbound(receiver, amount, transaction)
+                                : amount;
+
+                receiver.setBalance(receiver.getBalance().add(net));
+                receiver.setUpdatedAt(OffsetDateTime.now());
+                walletRepository.save(receiver);
+                saveLedger(transaction, receiver, LedgerEntryType.CREDIT, net, receiver.getBalance());
         }
-        Wallet sender = lockWallets(transaction.getSenderWallet().getId())
-                .get(transaction.getSenderWallet().getId());
-        refundAndClose(transaction, sender, TransactionStatus.FAILED, "Blocked by admin");
-        notificationService.notifyUser(transaction.getReceiverWallet().getUser().getId(), NotificationType.TRANSFER_FAILED,
-                NotificationSeverity.INFO, "A transfer of " + money(transaction.getAmount())
-                        + " to you was cancelled", transaction);
-    }
 
-    private void attachBatch(Transaction transaction, Long batchId) {
-        if (batchId != null) {
-            transaction.setSettlementBatch(settlementBatchRepository.getReferenceById(batchId));
+        private void attachBatch(Transaction transaction, Long batchId) {
+                if (batchId != null) {
+                        transaction.setSettlementBatch(settlementBatchRepository.getReferenceById(batchId));
+                }
         }
-    }
 
-    private Transaction getTransactionForUpdate(Long transactionId) {
-        return transactionRepository.findByIdForUpdate(transactionId)
-                .orElseThrow(() -> new BusinessRuleException(HttpStatus.NOT_FOUND, "Transaction not found"));
-    }
-
-    private void refundAndClose(Transaction transaction, Wallet sender, TransactionStatus status, String reason) {
-        sender.setBalance(sender.getBalance().add(transaction.getAmount()));
-        if (transaction.getInitiatedAt().atZoneSameInstant(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate()
-                .equals(WalletService.today())
-                && WalletService.today().equals(sender.getDailySpentDate())) {
-            BigDecimal remaining = sender.getDailySpent().subtract(transaction.getAmount());
-            sender.setDailySpent(remaining.signum() < 0 ? BigDecimal.ZERO : remaining);
+        private Transaction getTransactionForUpdate(Long transactionId) {
+                return transactionRepository.findByIdForUpdate(transactionId)
+                                .orElseThrow(() -> new BusinessRuleException(HttpStatus.NOT_FOUND,
+                                                "Transaction not found"));
         }
-        sender.setUpdatedAt(OffsetDateTime.now());
-        walletRepository.save(sender);
-        saveLedger(transaction, sender, LedgerEntryType.REFUND, transaction.getAmount(), sender.getBalance());
 
-        transaction.setStatus(status);
-        transaction.setFailureReason(reason);
-        transactionRepository.save(transaction);
+        private void refundAndClose(Transaction transaction, Wallet sender,
+                        TransactionStatus status, String reason) {
+                sender.setBalance(sender.getBalance().add(transaction.getAmount()));
+                if (transaction.getInitiatedAt().atZoneSameInstant(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate()
+                                .equals(WalletService.today())
+                                && WalletService.today().equals(sender.getDailySpentDate())) {
+                        BigDecimal remaining = sender.getDailySpent().subtract(transaction.getAmount());
+                        sender.setDailySpent(remaining.signum() < 0 ? BigDecimal.ZERO : remaining);
+                }
+                sender.setUpdatedAt(OffsetDateTime.now());
+                walletRepository.save(sender);
+                saveLedger(transaction, sender, LedgerEntryType.REFUND, transaction.getAmount(), sender.getBalance());
 
-        String recipientName = transaction.getReceiverWallet().getUser().getName();
-        NotificationType notificationType = status == TransactionStatus.DECLINED
-                ? NotificationType.TRANSFER_DECLINED : NotificationType.TRANSFER_FAILED;
-        String outcome = status == TransactionStatus.DECLINED ? "was declined" : "failed";
-        notificationService.notifyUser(sender.getUser().getId(), notificationType, NotificationSeverity.INFO,
-                money(transaction.getAmount()) + " transfer to " + recipientName + " " + outcome
-                        + ". Amount refunded to your wallet", transaction);
-    }
+                transaction.setStatus(status);
+                transaction.setFailureReason(reason);
+                transactionRepository.save(transaction);
 
-    /** Acquires locks by ascending id to avoid a deadlock between opposing settlements. */
-    private Map<Long, Wallet> lockWallets(Long... walletIds) {
-        Map<Long, Wallet> wallets = new TreeMap<>();
-        for (Long walletId : new TreeSet<>(Arrays.asList(walletIds))) {
-            wallets.put(walletId, walletRepository.findByIdForUpdate(walletId)
-                    .orElseThrow(() -> new BusinessRuleException(HttpStatus.NOT_FOUND, "Wallet not found")));
+                String recipientName = transaction.getReceiverWallet().getUser().getName();
+                NotificationType notificationType = status == TransactionStatus.DECLINED
+                                ? NotificationType.TRANSFER_DECLINED
+                                : NotificationType.TRANSFER_FAILED;
+                String outcome = status == TransactionStatus.DECLINED ? "was declined" : "failed";
+                notificationService.notifyUser(sender.getUser().getId(), notificationType, NotificationSeverity.INFO,
+                                money(transaction.getAmount()) + " transfer to " + recipientName + " " + outcome
+                                                + ". Amount refunded to your wallet",
+                                transaction);
         }
-        return wallets;
-    }
 
-    private void saveLedger(Transaction transaction, Wallet wallet, LedgerEntryType type,
-                            BigDecimal amount, BigDecimal balanceAfter) {
-        LedgerEntry entry = new LedgerEntry();
-        entry.setTransaction(transaction);
-        entry.setWallet(wallet);
-        entry.setEntryType(type);
-        entry.setAmount(amount);
-        entry.setBalanceAfter(balanceAfter);
-        entry.setCreatedAt(OffsetDateTime.now());
-        ledgerEntryRepository.save(entry);
-    }
+        private void saveLedger(Transaction transaction, Wallet wallet, LedgerEntryType type,
+                        BigDecimal amount, BigDecimal balanceAfter) {
+                LedgerEntry entry = new LedgerEntry();
+                entry.setTransaction(transaction);
+                entry.setWallet(wallet);
+                entry.setEntryType(type);
+                entry.setAmount(amount);
+                entry.setBalanceAfter(balanceAfter);
+                entry.setCreatedAt(OffsetDateTime.now());
+                ledgerEntryRepository.save(entry);
+        }
 
-    private String money(BigDecimal amount) {
-        return String.format(java.util.Locale.forLanguageTag("en-IN"), "\\u20b9%,.2f", amount);
-    }
+        private String money(BigDecimal amount) {
+                NumberFormat fmt = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"));
+                fmt.setMinimumFractionDigits(2);
+                fmt.setMaximumFractionDigits(2);
+                return fmt.format(amount);
+        }
 }

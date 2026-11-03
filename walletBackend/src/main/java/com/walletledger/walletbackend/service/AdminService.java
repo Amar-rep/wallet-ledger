@@ -30,6 +30,7 @@ import com.walletledger.walletbackend.dto.response.AdminTransactionResponse;
 import com.walletledger.walletbackend.dto.response.AdminUserDetailResponse;
 import com.walletledger.walletbackend.dto.response.AdminUserResponse;
 import com.walletledger.walletbackend.dto.response.DailyVolumePoint;
+import com.walletledger.walletbackend.dto.response.DailySummaryResponse;
 import com.walletledger.walletbackend.dto.response.DashboardResponse;
 import com.walletledger.walletbackend.dto.response.FraudAlertResponse;
 import com.walletledger.walletbackend.dto.response.JobRunResponse;
@@ -359,8 +360,8 @@ public class AdminService {
 
                 BigDecimal debits = orZero(ledgerEntryRepository.sumForSettled(
                                 LedgerEntryType.DEBIT, TransactionType.TRANSFER, TransactionStatus.SUCCESS, from, to));
-                BigDecimal credits = orZero(ledgerEntryRepository.sumForSettled(
-                                LedgerEntryType.CREDIT, TransactionType.TRANSFER, TransactionStatus.SUCCESS, from, to));
+                BigDecimal credits = orZero(ledgerEntryRepository.sumCreditSideForSettled(
+                                TransactionType.TRANSFER, TransactionStatus.SUCCESS, from, to));
                 BigDecimal pendingAmt = orZero(transactionRepository.sumByStatus(
                                 TransactionType.TRANSFER, TransactionStatus.PENDING));
 
@@ -368,6 +369,26 @@ public class AdminService {
                 BigDecimal diff = debits.subtract(credits).abs();
 
                 return new ReconciliationResponse(target, debits, credits, pendingAmt, mismatch, diff);
+        }
+
+        // ── Daily Summary ────────────────────────────────────────────────────────────
+        public List<DailySummaryResponse> dailySummaries(int limit) {
+                int cap = Math.min(Math.max(1, limit), 90);
+                return dailySummaryRepository
+                                .findAll(Sort.by(Sort.Direction.DESC, "summaryDate"))
+                                .stream()
+                                .limit(cap)
+                                .map(s -> new DailySummaryResponse(
+                                                s.getSummaryDate(),
+                                                s.getTransfersInitiated() != null ? s.getTransfersInitiated() : 0,
+                                                orZero(s.getInitiatedAmount()),
+                                                s.getTransfersSettled() != null ? s.getTransfersSettled() : 0,
+                                                orZero(s.getSettledAmount()),
+                                                s.getFraudAlertsRaised() != null ? s.getFraudAlertsRaised() : 0,
+                                                s.getNewRegistrations() != null ? s.getNewRegistrations() : 0,
+                                                orZero(s.getPendingSettlementAmount()),
+                                                Boolean.TRUE.equals(s.getReconciliationOk())))
+                                .toList();
         }
 
         // ── Helpers

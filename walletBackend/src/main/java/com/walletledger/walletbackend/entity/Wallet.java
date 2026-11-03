@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
+import com.walletledger.walletbackend.dto.enums.WalletKind;
 import com.walletledger.walletbackend.dto.enums.WalletStatus;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -30,6 +32,7 @@ public class Wallet {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** NULL for the system wallet; always set for CUSTOMER wallets. */
     @OneToOne
     @JoinColumn(name = "user_id")
     private User user;
@@ -40,6 +43,21 @@ public class Wallet {
 
     @Enumerated(EnumType.STRING)
     private WalletStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "wallet_kind", nullable = false)
+    private WalletKind walletKind = WalletKind.CUSTOMER;
+
+    /** Whether this wallet has opted in to Flex Instant Credit. */
+    @Column(name = "flex_enabled", nullable = false)
+    private boolean flexEnabled = false;
+
+    /**
+     * Outstanding Flex debt owed to the system wallet.
+     * Repaid automatically from incoming funds before the remainder is credited.
+     */
+    @Column(name = "flex_debt", nullable = false)
+    private BigDecimal flexDebt = BigDecimal.ZERO;
 
     @Version
     private Long version;

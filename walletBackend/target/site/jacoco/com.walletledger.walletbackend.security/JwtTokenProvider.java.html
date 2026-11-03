@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JwtTokenProvider.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.security</a> &gt; <span class="el_source">JwtTokenProvider.java</span></div><h1>JwtTokenProvider.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.security;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
+import javax.crypto.SecretKey;
+
+import com.walletledger.walletbackend.entity.User;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
+import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SecurityException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+@Component
+public class JwtTokenProvider {
+
+<span class="fc" id="L24">    private static final Logger log = LoggerFactory.getLogger(JwtTokenProvider.class);</span>
+    public static final String CLAIM_TOKEN_TYPE = &quot;type&quot;;
+    public static final String CLAIM_USER_ID = &quot;userId&quot;;
+    public static final String CLAIM_ROLE = &quot;role&quot;;
+    public static final String TOKEN_TYPE_ACCESS = &quot;ACCESS&quot;;
+<span class="fc" id="L29">    public static final String TOKEN_TYPE_REFRESH = &quot;REFRESH&quot;;</span>
+
+    private final SecretKey signingKey;
+    private final long accessTokenExpirationMs;
+    private final long refreshTokenExpirationMs;
+
+<span class="fc" id="L35">    public JwtTokenProvider(</span>
+            @Value(&quot;${jwt.secret:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}&quot;)
+            String jwtSecret,
+            @Value(&quot;${jwt.access-token-expiration-ms:900000}&quot;)
+            long accessTokenExpirationMs,
+            @Value(&quot;${jwt.refresh-token-expiration-ms:604800000}&quot;)
+            long refreshTokenExpirationMs
+    ) {
+<span class="fc" id="L43">        this.signingKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L44">        this.accessTokenExpirationMs = accessTokenExpirationMs;</span>
+<span class="fc" id="L45">        this.refreshTokenExpirationMs = refreshTokenExpirationMs;</span>
+<span class="fc" id="L46">    }</span>
+
+    public String generateAccessToken(User user) {
+<span class="fc" id="L49">        Date now = new Date();</span>
+<span class="fc" id="L50">        Date expiryDate = new Date(now.getTime() + accessTokenExpirationMs);</span>
+
+<span class="fc" id="L52">        return Jwts.builder()</span>
+<span class="fc" id="L53">                .subject(user.getEmail())</span>
+<span class="fc" id="L54">                .claim(CLAIM_USER_ID, user.getId())</span>
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">                .claim(CLAIM_ROLE, user.getRole() != null ? user.getRole().name() : &quot;USER&quot;)</span>
+<span class="fc" id="L56">                .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ACCESS)</span>
+<span class="fc" id="L57">                .issuedAt(now)</span>
+<span class="fc" id="L58">                .expiration(expiryDate)</span>
+<span class="fc" id="L59">                .signWith(signingKey)</span>
+<span class="fc" id="L60">                .compact();</span>
+    }
+
+    public String generateRefreshToken(User user) {
+<span class="fc" id="L64">        Date now = new Date();</span>
+<span class="fc" id="L65">        Date expiryDate = new Date(now.getTime() + refreshTokenExpirationMs);</span>
+
+<span class="fc" id="L67">        return Jwts.builder()</span>
+<span class="fc" id="L68">                .subject(user.getEmail())</span>
+<span class="fc" id="L69">                .claim(CLAIM_USER_ID, user.getId())</span>
+<span class="fc" id="L70">                .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_REFRESH)</span>
+<span class="fc" id="L71">                .issuedAt(now)</span>
+<span class="fc" id="L72">                .expiration(expiryDate)</span>
+<span class="fc" id="L73">                .signWith(signingKey)</span>
+<span class="fc" id="L74">                .compact();</span>
+    }
+
+    public boolean validateToken(String token) {
+        try {
+<span class="fc" id="L79">            Jwts.parser()</span>
+<span class="fc" id="L80">                    .verifyWith(signingKey)</span>
+<span class="fc" id="L81">                    .build()</span>
+<span class="fc" id="L82">                    .parseSignedClaims(token);</span>
+<span class="fc" id="L83">            return true;</span>
+<span class="fc" id="L84">        } catch (SecurityException | MalformedJwtException e) {</span>
+<span class="fc" id="L85">            log.warn(&quot;Invalid JWT signature/format: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L86">        } catch (ExpiredJwtException e) {</span>
+<span class="fc" id="L87">            log.warn(&quot;Expired JWT token: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L88">        } catch (UnsupportedJwtException e) {</span>
+<span class="nc" id="L89">            log.warn(&quot;Unsupported JWT token: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L90">        } catch (IllegalArgumentException e) {</span>
+<span class="fc" id="L91">            log.warn(&quot;JWT claims string is empty: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L92">        } catch (JwtException e) {</span>
+<span class="nc" id="L93">            log.warn(&quot;Invalid JWT token: {}&quot;, e.getMessage());</span>
+        }
+<span class="fc" id="L95">        return false;</span>
+    }
+
+    public Claims getClaims(String token) {
+<span class="fc" id="L99">        return Jwts.parser()</span>
+<span class="fc" id="L100">                .verifyWith(signingKey)</span>
+<span class="fc" id="L101">                .build()</span>
+<span class="fc" id="L102">                .parseSignedClaims(token)</span>
+<span class="fc" id="L103">                .getPayload();</span>
+    }
+
+    public String getEmailFromToken(String token) {
+<span class="fc" id="L107">        return getClaims(token).getSubject();</span>
+    }
+
+    public String getTokenType(String token) {
+<span class="fc" id="L111">        Object type = getClaims(token).get(CLAIM_TOKEN_TYPE);</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">        return type != null ? type.toString() : null;</span>
+    }
+
+    public Long getUserIdFromToken(String token) {
+<span class="fc" id="L116">        Object userId = getClaims(token).get(CLAIM_USER_ID);</span>
+<span class="pc bpc" id="L117" title="1 of 2 branches missed.">        if (userId instanceof Number number) {</span>
+<span class="fc" id="L118">            return number.longValue();</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">        } else if (userId instanceof String str) {</span>
+<span class="nc" id="L120">            return Long.parseLong(str);</span>
+        }
+<span class="nc" id="L122">        return null;</span>
+    }
+
+    public long getAccessTokenExpirationSeconds() {
+<span class="fc" id="L126">        return accessTokenExpirationMs / 1000;</span>
+    }
+
+    public long getRefreshTokenExpirationSeconds() {
+<span class="nc" id="L130">        return refreshTokenExpirationMs / 1000;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

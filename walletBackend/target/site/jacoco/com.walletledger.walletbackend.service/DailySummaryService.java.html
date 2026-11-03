@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DailySummaryService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.service</a> &gt; <span class="el_source">DailySummaryService.java</span></div><h1>DailySummaryService.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.service;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+
+import com.walletledger.walletbackend.dto.enums.LedgerEntryType;
+import com.walletledger.walletbackend.dto.enums.NotificationSeverity;
+import com.walletledger.walletbackend.dto.enums.NotificationType;
+import com.walletledger.walletbackend.dto.enums.TransactionStatus;
+import com.walletledger.walletbackend.dto.enums.TransactionType;
+import com.walletledger.walletbackend.entity.DailySummary;
+import com.walletledger.walletbackend.repository.DailySummaryRepository;
+import com.walletledger.walletbackend.repository.FraudAlertRepository;
+import com.walletledger.walletbackend.repository.LedgerEntryRepository;
+import com.walletledger.walletbackend.repository.TransactionRepository;
+import com.walletledger.walletbackend.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class DailySummaryService {
+
+<span class="fc" id="L27">    private static final ZoneId INDIA_TIME = ZoneId.of(&quot;Asia/Kolkata&quot;);</span>
+
+    private final TransactionRepository transactionRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
+    private final FraudAlertRepository fraudAlertRepository;
+    private final UserRepository userRepository;
+    private final DailySummaryRepository dailySummaryRepository;
+    private final NotificationService notificationService;
+
+    /** Safe to re-run for the same date: the existing row is overwritten. */
+    @Transactional
+    public DailySummary generate(LocalDate date) {
+<span class="fc" id="L39">        OffsetDateTime from = date.atStartOfDay(INDIA_TIME).toOffsetDateTime();</span>
+<span class="fc" id="L40">        OffsetDateTime to = date.plusDays(1).atStartOfDay(INDIA_TIME).toOffsetDateTime();</span>
+<span class="fc" id="L41">        TransactionType transfer = TransactionType.TRANSFER;</span>
+<span class="fc" id="L42">        TransactionStatus success = TransactionStatus.SUCCESS;</span>
+
+<span class="fc" id="L44">        DailySummary summary = dailySummaryRepository.findBySummaryDate(date).orElseGet(DailySummary::new);</span>
+<span class="fc" id="L45">        summary.setSummaryDate(date);</span>
+<span class="fc" id="L46">        summary.setTransfersInitiated((int) transactionRepository.countInitiated(transfer, from, to));</span>
+<span class="fc" id="L47">        summary.setInitiatedAmount(transactionRepository.sumInitiated(transfer, from, to));</span>
+<span class="fc" id="L48">        summary.setTransfersSettled((int) transactionRepository.countSettled(transfer, success, from, to));</span>
+<span class="fc" id="L49">        summary.setSettledAmount(transactionRepository.sumSettled(transfer, success, from, to));</span>
+<span class="fc" id="L50">        summary.setFraudAlertsRaised(</span>
+<span class="fc" id="L51">                (int) fraudAlertRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(from, to));</span>
+<span class="fc" id="L52">        summary.setNewRegistrations(</span>
+<span class="fc" id="L53">                (int) userRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(from, to));</span>
+<span class="fc" id="L54">        summary.setPendingSettlementAmount(transactionRepository.sumByStatus(transfer, TransactionStatus.PENDING));</span>
+
+<span class="fc" id="L56">        BigDecimal debits = ledgerEntryRepository.sumForSettled(LedgerEntryType.DEBIT, transfer, success, from, to);</span>
+<span class="fc" id="L57">        BigDecimal credits = ledgerEntryRepository.sumCreditSideForSettled(transfer, success, from, to);</span>
+<span class="fc" id="L58">        summary.setTotalDebitsSettled(debits);</span>
+<span class="fc" id="L59">        summary.setTotalCreditsSettled(credits);</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        boolean match = debits.compareTo(credits) == 0;</span>
+<span class="fc" id="L61">        summary.setReconciliationOk(match);</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        if (summary.getCreatedAt() == null) {</span>
+<span class="fc" id="L63">            summary.setCreatedAt(OffsetDateTime.now());</span>
+        }
+<span class="fc" id="L65">        summary = dailySummaryRepository.save(summary);</span>
+
+<span class="fc bfc" id="L67" title="All 2 branches covered.">        if (!match) {</span>
+<span class="fc" id="L68">            notificationService.notifyAdmins(</span>
+<span class="fc" id="L69">                    NotificationType.RECON_MISMATCH,</span>
+<span class="fc" id="L70">                    NotificationSeverity.CRITICAL,</span>
+<span class="fc" id="L71">                    &quot;Reconciliation mismatch on &quot; + date + &quot;: debits &quot; + money(debits)</span>
+<span class="fc" id="L72">                            + &quot; vs credits &quot; + money(credits),</span>
+<span class="fc" id="L73">                    null);</span>
+        }
+<span class="fc" id="L75">        return summary;</span>
+    }
+
+    private String money(BigDecimal amount) {
+<span class="fc" id="L79">        return String.format(java.util.Locale.forLanguageTag(&quot;en-IN&quot;), &quot;₹%,.2f&quot;, amount);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

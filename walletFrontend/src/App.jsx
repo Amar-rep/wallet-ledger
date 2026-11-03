@@ -11,6 +11,7 @@ import TransactionsPage from './pages/TransactionsPage.jsx'
 import TransactionDetailPage from './pages/TransactionDetailPage.jsx'
 import NotificationsPage from './pages/NotificationsPage.jsx'
 import WalletSettingsPage from './pages/WalletSettingsPage.jsx'
+import FlexPage from './pages/FlexPage.jsx'
 
 // Admin pages
 import AdminDashboardPage from './pages/admin/AdminDashboardPage.jsx'
@@ -23,6 +24,8 @@ import AdminFraudPage from './pages/admin/AdminFraudPage.jsx'
 import AdminJobMonitorPage from './pages/admin/AdminJobMonitorPage.jsx'
 import AdminReconciliationPage from './pages/admin/AdminReconciliationPage.jsx'
 import AdminRegisterPage from './pages/admin/AdminRegisterPage.jsx'
+import AdminFlexPage from './pages/admin/AdminFlexPage.jsx'
+import AdminDailySummaryPage from './pages/admin/AdminDailySummaryPage.jsx'
 
 export default function App() {
   return (
@@ -47,6 +50,7 @@ export default function App() {
             <Route path="/transactions/:id" element={<TransactionDetailPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet/settings" element={<WalletSettingsPage />} />
+            <Route path="/flex" element={<FlexPage />} />
           </Route>
 
           {/* Admin routes */}
@@ -66,7 +70,9 @@ export default function App() {
             <Route path="/admin/fraud" element={<AdminFraudPage />} />
             <Route path="/admin/jobs" element={<AdminJobMonitorPage />} />
             <Route path="/admin/reconciliation" element={<AdminReconciliationPage />} />
+            <Route path="/admin/daily-summary" element={<AdminDailySummaryPage />} />
             <Route path="/admin/register-admin" element={<AdminRegisterPage />} />
+            <Route path="/admin/flex" element={<AdminFlexPage />} />
           </Route>
 
           {/* Catch-all */}

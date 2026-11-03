@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.service</a> &gt; <span class="el_source">AuthService.java</span></div><h1>AuthService.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.service;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+
+import com.walletledger.walletbackend.dto.enums.UserRole;
+import com.walletledger.walletbackend.dto.enums.WalletStatus;
+import com.walletledger.walletbackend.dto.enums.NotificationSeverity;
+import com.walletledger.walletbackend.dto.enums.NotificationType;
+import com.walletledger.walletbackend.dto.request.LoginRequest;
+import com.walletledger.walletbackend.dto.request.RefreshTokenRequest;
+import com.walletledger.walletbackend.dto.request.RegisterRequest;
+import com.walletledger.walletbackend.dto.response.LoginResponse;
+import com.walletledger.walletbackend.dto.response.TokenRefreshResponse;
+import com.walletledger.walletbackend.dto.response.UserProfileResponse;
+import com.walletledger.walletbackend.entity.LoginAttempt;
+import com.walletledger.walletbackend.entity.User;
+import com.walletledger.walletbackend.entity.Wallet;
+import com.walletledger.walletbackend.exception.BusinessRuleException;
+import com.walletledger.walletbackend.exception.DuplicateResourceException;
+import com.walletledger.walletbackend.exception.InvalidTokenException;
+import com.walletledger.walletbackend.repository.LoginAttemptRepository;
+import com.walletledger.walletbackend.repository.UserRepository;
+import com.walletledger.walletbackend.repository.WalletRepository;
+import com.walletledger.walletbackend.security.JwtTokenProvider;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+<span class="fc" id="L42">    private static final ZoneId INDIA_TIME = ZoneId.of(&quot;Asia/Kolkata&quot;);</span>
+    private static final int MAX_FAILED_LOGINS = 5;
+<span class="fc" id="L44">    private static final int LOCK_MINUTES = 30;</span>
+
+    private final UserRepository userRepository;
+    private final WalletRepository walletRepository;
+    private final LoginAttemptRepository loginAttemptRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final NotificationService notificationService;
+
+    @Transactional
+    public LoginResponse register(RegisterRequest request) {
+<span class="fc" id="L55">        return doRegister(request, UserRole.USER);</span>
+    }
+
+    @Transactional
+    public LoginResponse registerAdmin(RegisterRequest request) {
+<span class="fc" id="L60">        return doRegister(request, UserRole.ADMIN);</span>
+    }
+
+    @Transactional
+    private LoginResponse doRegister(RegisterRequest request, UserRole role) {
+<span class="fc" id="L65">        String email = request.email().trim().toLowerCase();</span>
+<span class="fc" id="L66">        String phone = request.phone().trim();</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">        if (userRepository.existsByEmail(email)) {</span>
+<span class="fc" id="L68">            throw new DuplicateResourceException(&quot;Email is already registered: &quot; + email);</span>
+        }
+<span class="fc bfc" id="L70" title="All 2 branches covered.">        if (userRepository.existsByPhone(phone)) {</span>
+<span class="fc" id="L71">            throw new DuplicateResourceException(&quot;Phone number is already registered&quot;);</span>
+        }
+
+<span class="fc" id="L74">        User user = new User();</span>
+<span class="fc" id="L75">        user.setName(request.name().trim());</span>
+<span class="fc" id="L76">        user.setEmail(email);</span>
+<span class="fc" id="L77">        user.setPhone(phone);</span>
+<span class="fc" id="L78">        user.setPasswordHash(passwordEncoder.encode(request.password()));</span>
+<span class="fc" id="L79">        user.setPinHash(passwordEncoder.encode(request.pin()));</span>
+<span class="fc" id="L80">        user.setRole(role);</span>
+<span class="fc" id="L81">        user.setFailedLoginCount(0);</span>
+<span class="fc" id="L82">        user.setCreatedAt(OffsetDateTime.now());</span>
+
+<span class="fc" id="L84">        User savedUser = userRepository.save(user);</span>
+
+<span class="fc" id="L86">        Wallet wallet = new Wallet();</span>
+<span class="fc" id="L87">        wallet.setUser(savedUser);</span>
+<span class="fc" id="L88">        wallet.setBalance(BigDecimal.ZERO);</span>
+<span class="fc" id="L89">        wallet.setDailySpent(BigDecimal.ZERO);</span>
+<span class="fc" id="L90">        wallet.setDailySpentDate(LocalDate.now(INDIA_TIME));</span>
+<span class="fc" id="L91">        wallet.setStatus(WalletStatus.ACTIVE);</span>
+<span class="fc" id="L92">        wallet.setCreatedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L93">        wallet.setUpdatedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L94">        walletRepository.save(wallet);</span>
+
+<span class="fc" id="L96">        String accessToken = jwtTokenProvider.generateAccessToken(savedUser);</span>
+<span class="fc" id="L97">        String refreshToken = jwtTokenProvider.generateRefreshToken(savedUser);</span>
+
+<span class="fc" id="L99">        return new LoginResponse(accessToken, refreshToken, &quot;Bearer&quot;,</span>
+<span class="fc" id="L100">                jwtTokenProvider.getAccessTokenExpirationSeconds(), mapToUserProfile(savedUser));</span>
+    }
+
+    /**
+     * Failed-attempt changes intentionally commit before the login error is
+     * returned.
+     * Otherwise Spring would roll them back along with the rejected login request.
+     */
+    @Transactional(noRollbackFor = BusinessRuleException.class)
+    public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest) {
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        String clientIp = httpRequest != null ? httpRequest.getRemoteAddr() : null;</span>
+<span class="fc" id="L111">        String email = request.email().trim().toLowerCase();</span>
+
+<span class="fc" id="L113">        User user = userRepository.findByEmail(email).orElse(null);</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">        if (user == null) {</span>
+<span class="fc" id="L115">            recordLoginAttempt(null, email, false, clientIp);</span>
+<span class="fc" id="L116">            throw new BusinessRuleException(HttpStatus.UNAUTHORIZED, &quot;Invalid email or password&quot;);</span>
+        }
+
+<span class="fc" id="L119">        OffsetDateTime now = OffsetDateTime.now();</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        if (isCurrentlyLocked(user, now)) {</span>
+<span class="fc" id="L121">            recordLoginAttempt(user, email, false, clientIp);</span>
+<span class="fc" id="L122">            long minutesRemaining = Duration.between(now, user.getLockedAt().plusMinutes(LOCK_MINUTES))</span>
+<span class="fc" id="L123">                    .toMinutes() + 1;</span>
+<span class="fc" id="L124">            throw new BusinessRuleException(HttpStatus.LOCKED,</span>
+<span class="fc" id="L125">                    &quot;Account is locked. Try again in &quot; + minutesRemaining + &quot; minute(s)&quot;);</span>
+        }
+
+<span class="fc bfc" id="L128" title="All 2 branches covered.">        if (user.getLockedAt() != null) {</span>
+<span class="fc" id="L129">            user.setLockedAt(null);</span>
+<span class="fc" id="L130">            user.setFailedLoginCount(0);</span>
+        }
+
+<span class="fc bfc" id="L133" title="All 2 branches covered.">        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {</span>
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">            int failed = (user.getFailedLoginCount() == null ? 0 : user.getFailedLoginCount()) + 1;</span>
+<span class="fc" id="L135">            user.setFailedLoginCount(failed);</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">            if (failed &gt;= MAX_FAILED_LOGINS) {</span>
+<span class="fc" id="L137">                user.setLockedAt(now);</span>
+<span class="fc" id="L138">                notificationService.notifyUser(user.getId(), NotificationType.ACCOUNT_LOCKED, NotificationSeverity.INFO,</span>
+<span class="fc" id="L139">                        &quot;Your account has been locked after multiple failed login attempts&quot;, null);</span>
+            }
+<span class="fc" id="L141">            userRepository.save(user);</span>
+<span class="fc" id="L142">            recordLoginAttempt(user, email, false, clientIp);</span>
+<span class="fc" id="L143">            throw new BusinessRuleException(HttpStatus.UNAUTHORIZED, &quot;Invalid email or password&quot;);</span>
+        }
+
+<span class="fc" id="L146">        user.setFailedLoginCount(0);</span>
+<span class="fc" id="L147">        user.setLockedAt(null);</span>
+<span class="fc" id="L148">        userRepository.save(user);</span>
+<span class="fc" id="L149">        recordLoginAttempt(user, email, true, clientIp);</span>
+
+<span class="fc" id="L151">        String accessToken = jwtTokenProvider.generateAccessToken(user);</span>
+<span class="fc" id="L152">        String refreshToken = jwtTokenProvider.generateRefreshToken(user);</span>
+<span class="fc" id="L153">        return new LoginResponse(accessToken, refreshToken, &quot;Bearer&quot;,</span>
+<span class="fc" id="L154">                jwtTokenProvider.getAccessTokenExpirationSeconds(), mapToUserProfile(user));</span>
+    }
+
+    @Transactional(readOnly = true)
+    public TokenRefreshResponse refreshToken(RefreshTokenRequest request) {
+<span class="fc" id="L159">        String refreshToken = request.refreshToken();</span>
+
+<span class="fc bfc" id="L161" title="All 2 branches covered.">        if (!jwtTokenProvider.validateToken(refreshToken)) {</span>
+<span class="fc" id="L162">            throw new InvalidTokenException(&quot;Invalid or expired refresh token&quot;);</span>
+        }
+
+<span class="fc" id="L165">        String tokenType = jwtTokenProvider.getTokenType(refreshToken);</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">        if (!JwtTokenProvider.TOKEN_TYPE_REFRESH.equalsIgnoreCase(tokenType)) {</span>
+<span class="fc" id="L167">            throw new InvalidTokenException(&quot;Provided token is not a refresh token&quot;);</span>
+        }
+
+<span class="fc" id="L170">        String email = jwtTokenProvider.getEmailFromToken(refreshToken);</span>
+<span class="fc" id="L171">        User user = userRepository.findByEmail(email)</span>
+<span class="fc" id="L172">                .orElseThrow(() -&gt; new UsernameNotFoundException(&quot;User not found with email: &quot; + email));</span>
+
+<span class="fc bfc" id="L174" title="All 2 branches covered.">        if (isCurrentlyLocked(user, OffsetDateTime.now())) {</span>
+<span class="fc" id="L175">            throw new BusinessRuleException(HttpStatus.LOCKED, &quot;Account is locked&quot;);</span>
+        }
+
+<span class="fc" id="L178">        String newAccessToken = jwtTokenProvider.generateAccessToken(user);</span>
+<span class="fc" id="L179">        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user);</span>
+
+<span class="fc" id="L181">        return new TokenRefreshResponse(</span>
+<span class="fc" id="L182">                newAccessToken,</span>
+<span class="fc" id="L183">                newRefreshToken,</span>
+<span class="fc" id="L184">                &quot;Bearer&quot;,</span>
+<span class="fc" id="L185">                jwtTokenProvider.getAccessTokenExpirationSeconds());</span>
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfileResponse getCurrentUserProfile(String email) {
+<span class="fc" id="L190">        User user = userRepository.findByEmail(email)</span>
+<span class="fc" id="L191">                .orElseThrow(() -&gt; new UsernameNotFoundException(&quot;User not found with email: &quot; + email));</span>
+<span class="fc" id="L192">        return mapToUserProfile(user);</span>
+    }
+
+    private void recordLoginAttempt(User user, String email, boolean success, String ipAddress) {
+<span class="fc" id="L196">        LoginAttempt attempt = new LoginAttempt();</span>
+<span class="fc" id="L197">        attempt.setUser(user);</span>
+<span class="fc" id="L198">        attempt.setEmail(email);</span>
+<span class="fc" id="L199">        attempt.setSuccess(success);</span>
+<span class="fc" id="L200">        attempt.setIpAddress(ipAddress);</span>
+<span class="fc" id="L201">        attempt.setAttemptedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L202">        loginAttemptRepository.save(attempt);</span>
+<span class="fc" id="L203">    }</span>
+
+    private boolean isCurrentlyLocked(User user, OffsetDateTime now) {
+<span class="fc bfc" id="L206" title="All 4 branches covered.">        return user.getLockedAt() != null &amp;&amp; user.getLockedAt().plusMinutes(LOCK_MINUTES).isAfter(now);</span>
+    }
+
+    private UserProfileResponse mapToUserProfile(User user) {
+<span class="fc" id="L210">        return new UserProfileResponse(</span>
+<span class="fc" id="L211">                user.getId(),</span>
+<span class="fc" id="L212">                user.getName(),</span>
+<span class="fc" id="L213">                user.getEmail(),</span>
+<span class="fc" id="L214">                user.getPhone(),</span>
+<span class="fc" id="L215">                user.getRole());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

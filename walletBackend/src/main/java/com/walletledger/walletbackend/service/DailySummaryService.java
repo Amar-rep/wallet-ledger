@@ -54,7 +54,7 @@ public class DailySummaryService {
         summary.setPendingSettlementAmount(transactionRepository.sumByStatus(transfer, TransactionStatus.PENDING));
 
         BigDecimal debits = ledgerEntryRepository.sumForSettled(LedgerEntryType.DEBIT, transfer, success, from, to);
-        BigDecimal credits = ledgerEntryRepository.sumForSettled(LedgerEntryType.CREDIT, transfer, success, from, to);
+        BigDecimal credits = ledgerEntryRepository.sumCreditSideForSettled(transfer, success, from, to);
         summary.setTotalDebitsSettled(debits);
         summary.setTotalCreditsSettled(credits);
         boolean match = debits.compareTo(credits) == 0;

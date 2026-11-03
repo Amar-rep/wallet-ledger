@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FraudAdminService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.service</a> &gt; <span class="el_source">FraudAdminService.java</span></div><h1>FraudAdminService.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.service;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+
+import com.walletledger.walletbackend.dto.enums.FraudAction;
+import com.walletledger.walletbackend.dto.enums.FraudAlertStatus;
+import com.walletledger.walletbackend.dto.enums.FraudAlertType;
+import com.walletledger.walletbackend.dto.enums.TransactionStatus;
+import com.walletledger.walletbackend.dto.request.FraudReviewRequest;
+import com.walletledger.walletbackend.dto.response.FraudAlertResponse;
+import com.walletledger.walletbackend.entity.FraudAlert;
+import com.walletledger.walletbackend.entity.User;
+import com.walletledger.walletbackend.exception.BusinessRuleException;
+import com.walletledger.walletbackend.repository.FraudAlertRepository;
+import com.walletledger.walletbackend.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class FraudAdminService {
+
+    private final FraudAlertRepository fraudAlertRepository;
+    private final UserRepository userRepository;
+    private final SettlementService settlementService;
+
+    @Transactional(readOnly = true)
+    public List&lt;FraudAlertResponse&gt; list(FraudAlertStatus status) {
+<span class="fc" id="L32">        return fraudAlertRepository.findByStatusOrderByCreatedAtDesc(status).stream()</span>
+<span class="fc" id="L33">                .map(this::toResponse)</span>
+<span class="fc" id="L34">                .toList();</span>
+    }
+
+    @Transactional
+    public FraudAlertResponse review(String adminEmail, Long alertId, FraudReviewRequest request) {
+<span class="fc" id="L39">        User admin = userRepository.findByEmail(adminEmail)</span>
+<span class="fc" id="L40">                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.UNAUTHORIZED, &quot;User not found&quot;));</span>
+<span class="fc" id="L41">        FraudAlert alert = fraudAlertRepository.findById(alertId)</span>
+<span class="fc" id="L42">                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND, &quot;Fraud alert not found&quot;));</span>
+
+<span class="fc bfc" id="L44" title="All 2 branches covered.">        if (alert.getStatus() != FraudAlertStatus.PENDING) {</span>
+<span class="fc" id="L45">            throw new BusinessRuleException(HttpStatus.CONFLICT, &quot;Fraud alert has already been reviewed&quot;);</span>
+        }
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        if (isReadOnly(alert)) {</span>
+<span class="fc" id="L48">            throw new BusinessRuleException(HttpStatus.CONFLICT,</span>
+<span class="fc" id="L49">                    &quot;Transaction is already &quot; + alert.getTransaction().getStatus() + &quot;; this alert is read-only&quot;);</span>
+        }
+
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        if (request.action() == FraudAction.BLOCK) {</span>
+<span class="fc bfc" id="L53" title="All 4 branches covered.">            if (alert.getAlertType() != FraudAlertType.HIGH_VALUE || alert.getTransaction() == null) {</span>
+<span class="fc" id="L54">                throw new BusinessRuleException(HttpStatus.BAD_REQUEST,</span>
+<span class="fc" id="L55">                        &quot;Only a high-value alert linked to a pending transfer can be blocked&quot;);</span>
+            }
+<span class="fc" id="L57">            settlementService.blockByAdmin(alert.getTransaction().getId());</span>
+<span class="fc" id="L58">            alert.setStatus(FraudAlertStatus.BLOCKED);</span>
+<span class="fc" id="L59">        } else {</span>
+<span class="fc" id="L60">            alert.setStatus(FraudAlertStatus.DISMISSED);</span>
+        }
+<span class="fc" id="L62">        alert.setReviewedBy(admin);</span>
+<span class="fc" id="L63">        alert.setReviewedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L64">        fraudAlertRepository.save(alert);</span>
+<span class="fc" id="L65">        return toResponse(alert);</span>
+    }
+
+    private boolean isReadOnly(FraudAlert alert) {
+<span class="fc bfc" id="L69" title="All 4 branches covered.">        return alert.getTransaction() != null &amp;&amp; alert.getTransaction().getStatus() != TransactionStatus.PENDING;</span>
+    }
+
+    private FraudAlertResponse toResponse(FraudAlert alert) {
+<span class="fc" id="L73">        return new FraudAlertResponse(alert.getId(), alert.getUser().getId(), alert.getUser().getName(),</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">                alert.getTransaction() == null ? null : alert.getTransaction().getId(), alert.getAlertType(),</span>
+<span class="fc" id="L75">                alert.getAmount(), alert.getDescription(), alert.getStatus(), isReadOnly(alert),</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">                alert.getReviewedBy() == null ? null : alert.getReviewedBy().getName(),</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">                alert.getReviewedAt() == null ? null : alert.getReviewedAt().toInstant(),</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">                alert.getCreatedAt() == null ? null : alert.getCreatedAt().toInstant());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

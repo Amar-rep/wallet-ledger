@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, AlertTriangle, Snowflake } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Snowflake, Zap } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { walletApi } from '../api/wallet.js'
 import { formatINR } from '../lib/formatters.js'
@@ -44,6 +45,14 @@ export default function WalletSettingsPage() {
     onError: (err) => toast.error(parseApiError(err).message),
   })
 
+  const toggleFlex = useMutation({
+    mutationFn: walletApi.toggleFlex,
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['wallet'] })
+      toast.success(res.message)
+    },
+    onError: (err) => toast.error(parseApiError(err).message),
+  })
   if (isLoading) return <div className="max-w-lg mx-auto"><SkeletonCard lines={5} /></div>
   if (error) return <div className="max-w-lg mx-auto"><ErrorState message={parseApiError(error).message} onRetry={refetch} /></div>
 
@@ -100,6 +109,47 @@ export default function WalletSettingsPage() {
             <span className="font-medium text-slate-800">{v}</span>
           </div>
         ))}
+      </Card>
+
+      {/* Flex Instant Credit */}
+      <Card className="p-5">
+        <div className="flex items-start gap-3 mb-3">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            wallet.flexEnabled ? 'bg-primary-100' : 'bg-slate-100'
+          }`}>
+            <Zap className={`w-5 h-5 ${wallet.flexEnabled ? 'text-primary-600' : 'text-slate-400'}`} />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-slate-800">Flex Instant Credit</p>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {wallet.flexEnabled
+                ? 'Active — eligible incoming transfers are credited immediately.'
+                : 'Disabled — transfers settle in 3 days.'}
+            </p>
+          </div>
+        </div>
+
+        {wallet.flexDebt > 0 && (
+          <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+            Outstanding Flex debt: <span className="font-semibold">{formatINR(wallet.flexDebt)}</span>
+            {' '}— repaid automatically from your next incoming transfer or top-up.
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={wallet.flexEnabled ? 'secondary' : 'primary'}
+            loading={toggleFlex.isPending}
+            onClick={() => toggleFlex.mutate()}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            {wallet.flexEnabled ? 'Disable Flex' : 'Enable Flex'}
+          </Button>
+          <Link to="/flex" className="text-xs text-primary-600 hover:underline ml-1">
+            View Flex history →
+          </Link>
+        </div>
       </Card>
     </div>
   )

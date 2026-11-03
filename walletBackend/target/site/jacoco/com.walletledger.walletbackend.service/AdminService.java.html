@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.service</a> &gt; <span class="el_source">AdminService.java</span></div><h1>AdminService.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.service;
+
+import java.math.BigDecimal;
+import java.security.Principal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import com.walletledger.walletbackend.dto.common.MessageResponse;
+import com.walletledger.walletbackend.dto.common.PageResponse;
+import com.walletledger.walletbackend.dto.enums.FraudAlertStatus;
+import com.walletledger.walletbackend.dto.enums.LedgerEntryType;
+import com.walletledger.walletbackend.dto.enums.TransactionDirection;
+import com.walletledger.walletbackend.dto.enums.TransactionStatus;
+import com.walletledger.walletbackend.dto.enums.TransactionStatusFilter;
+import com.walletledger.walletbackend.dto.enums.TransactionType;
+import com.walletledger.walletbackend.dto.enums.UserRole;
+import com.walletledger.walletbackend.dto.enums.WalletStatus;
+import com.walletledger.walletbackend.dto.request.AdminTransactionFilter;
+import com.walletledger.walletbackend.dto.request.FraudReviewRequest;
+import com.walletledger.walletbackend.dto.request.WalletFreezeRequest;
+import com.walletledger.walletbackend.dto.response.AdminTransactionDetailResponse;
+import com.walletledger.walletbackend.dto.response.AdminTransactionResponse;
+import com.walletledger.walletbackend.dto.response.AdminUserDetailResponse;
+import com.walletledger.walletbackend.dto.response.AdminUserResponse;
+import com.walletledger.walletbackend.dto.response.DailyVolumePoint;
+import com.walletledger.walletbackend.dto.response.DailySummaryResponse;
+import com.walletledger.walletbackend.dto.response.DashboardResponse;
+import com.walletledger.walletbackend.dto.response.FraudAlertResponse;
+import com.walletledger.walletbackend.dto.response.JobRunResponse;
+import com.walletledger.walletbackend.dto.response.LedgerEntryResponse;
+import com.walletledger.walletbackend.dto.response.ReconciliationResponse;
+import com.walletledger.walletbackend.dto.response.SettlementBatchResponse;
+import com.walletledger.walletbackend.dto.response.SettlementMonitorResponse;
+import com.walletledger.walletbackend.dto.response.TransactionSummaryResponse;
+import com.walletledger.walletbackend.entity.AuditLog;
+import com.walletledger.walletbackend.entity.ScheduledJobLog;
+import com.walletledger.walletbackend.entity.SettlementBatch;
+import com.walletledger.walletbackend.entity.Transaction;
+import com.walletledger.walletbackend.entity.User;
+import com.walletledger.walletbackend.entity.Wallet;
+import com.walletledger.walletbackend.exception.BusinessRuleException;
+import com.walletledger.walletbackend.repository.AuditLogRepository;
+import com.walletledger.walletbackend.repository.DailySummaryRepository;
+import com.walletledger.walletbackend.repository.FraudAlertRepository;
+import com.walletledger.walletbackend.repository.LedgerEntryRepository;
+import com.walletledger.walletbackend.repository.ScheduledJobLogRepository;
+import com.walletledger.walletbackend.repository.SettlementBatchRepository;
+import com.walletledger.walletbackend.repository.TransactionRepository;
+import com.walletledger.walletbackend.repository.UserRepository;
+import com.walletledger.walletbackend.repository.WalletRepository;
+import com.walletledger.walletbackend.service.FraudAdminService;
+import com.walletledger.walletbackend.service.SettlementOutcome;
+import com.walletledger.walletbackend.service.SettlementService;
+import com.walletledger.walletbackend.service.WalletService;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class AdminService {
+
+<span class="fc" id="L89">        private static final Logger logger = LoggerFactory.getLogger(AdminService.class);</span>
+<span class="fc" id="L90">        private static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);</span>
+
+        private final FraudAdminService fraudAdminService;
+        private final WalletService walletService;
+        private final SettlementService settlementService;
+        private final TransactionRepository transactionRepository;
+        private final UserRepository userRepository;
+        private final WalletRepository walletRepository;
+        private final LedgerEntryRepository ledgerEntryRepository;
+        private final ScheduledJobLogRepository scheduledJobLogRepository;
+        private final DailySummaryRepository dailySummaryRepository;
+        private final FraudAlertRepository fraudAlertRepository;
+        private final SettlementBatchRepository settlementBatchRepository;
+        private final AuditLogRepository auditLogRepository;
+
+        // ── Dashboard ────────────────────────────────────────────────────────────────
+        public DashboardResponse dashboard() {
+<span class="fc" id="L107">                LocalDate today = WalletService.today();</span>
+<span class="fc" id="L108">                OffsetDateTime from = today.atStartOfDay(IST).toOffsetDateTime();</span>
+<span class="fc" id="L109">                OffsetDateTime to = today.plusDays(1).atStartOfDay(IST).toOffsetDateTime();</span>
+<span class="fc" id="L110">                TransactionType tf = TransactionType.TRANSFER;</span>
+
+<span class="fc" id="L112">                long totalUsers = userRepository.count();</span>
+<span class="fc" id="L113">                long initiated = transactionRepository.countInitiated(tf, from, to);</span>
+<span class="fc" id="L114">                long settled = transactionRepository.countSettled(tf, TransactionStatus.SUCCESS, from, to);</span>
+<span class="fc" id="L115">                BigDecimal volume = orZero(transactionRepository.sumSettled(tf, TransactionStatus.SUCCESS, from, to));</span>
+<span class="fc" id="L116">                BigDecimal pending = orZero(transactionRepository.sumByStatus(tf, TransactionStatus.PENDING));</span>
+<span class="fc" id="L117">                long fraudPending = fraudAlertRepository.findByStatusOrderByCreatedAtDesc(FraudAlertStatus.PENDING)</span>
+<span class="fc" id="L118">                                .size();</span>
+
+<span class="fc" id="L120">                List&lt;DailyVolumePoint&gt; last30 = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">                for (int i = 29; i &gt;= 0; i--) {</span>
+<span class="fc" id="L122">                        LocalDate d = today.minusDays(i);</span>
+<span class="fc" id="L123">                        OffsetDateTime df = d.atStartOfDay(IST).toOffsetDateTime();</span>
+<span class="fc" id="L124">                        OffsetDateTime dt = d.plusDays(1).atStartOfDay(IST).toOffsetDateTime();</span>
+<span class="fc" id="L125">                        BigDecimal vol = orZero(</span>
+<span class="fc" id="L126">                                        transactionRepository.sumSettled(tf, TransactionStatus.SUCCESS, df, dt));</span>
+<span class="fc" id="L127">                        last30.add(new DailyVolumePoint(d, vol));</span>
+                }
+<span class="fc" id="L129">                return new DashboardResponse(totalUsers, initiated, settled, volume, pending, fraudPending, last30);</span>
+        }
+
+        // ── Users ────────────────────────────────────────────────────────────────────
+        public PageResponse&lt;AdminUserResponse&gt; users(
+                        @RequestParam(required = false) String search,
+                        @RequestParam(defaultValue = &quot;0&quot;) int page,
+                        @RequestParam(defaultValue = &quot;20&quot;) int size) {
+
+<span class="fc" id="L138">                PageRequest pr = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, &quot;createdAt&quot;));</span>
+<span class="fc" id="L139">                Page&lt;User&gt; result = userRepository.findAll(pr);</span>
+
+<span class="fc" id="L141">                List&lt;AdminUserResponse&gt; content = result.getContent().stream()</span>
+<span class="pc bpc" id="L142" title="1 of 4 branches missed.">                                .filter(u -&gt; search == null || search.isBlank()</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">                                                || u.getName().toLowerCase().contains(search.toLowerCase())</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">                                                || u.getEmail().toLowerCase().contains(search.toLowerCase())</span>
+<span class="fc bfc" id="L145" title="All 2 branches covered.">                                                || u.getPhone().contains(search))</span>
+<span class="fc" id="L146">                                .map(this::toAdminUserResponse)</span>
+<span class="fc" id="L147">                                .toList();</span>
+
+<span class="fc" id="L149">                return new PageResponse&lt;&gt;(content, result.getNumber(), result.getSize(),</span>
+<span class="fc" id="L150">                                result.getTotalElements(), result.getTotalPages());</span>
+        }
+
+        public AdminUserDetailResponse userDetail(@PathVariable Long userId) {
+<span class="fc" id="L154">                User user = userRepository.findById(userId)</span>
+<span class="fc" id="L155">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND, &quot;User not found&quot;));</span>
+<span class="fc" id="L156">                Wallet wallet = walletRepository.findByUserId(userId)</span>
+<span class="fc" id="L157">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND, &quot;Wallet not found&quot;));</span>
+
+<span class="fc" id="L159">                List&lt;TransactionSummaryResponse&gt; recent = transactionRepository.findAll(</span>
+<span class="fc" id="L160">                                (root, query, cb) -&gt; {</span>
+<span class="nc" id="L161">                                        Join&lt;Transaction, Wallet&gt; sender = root.join(&quot;senderWallet&quot;, JoinType.LEFT);</span>
+<span class="nc" id="L162">                                        Join&lt;Transaction, Wallet&gt; receiver = root.join(&quot;receiverWallet&quot;,</span>
+<span class="nc" id="L163">                                                        JoinType.INNER);</span>
+<span class="nc" id="L164">                                        return cb.or(cb.equal(sender.get(&quot;id&quot;), wallet.getId()),</span>
+<span class="nc" id="L165">                                                        cb.equal(receiver.get(&quot;id&quot;), wallet.getId()));</span>
+                                },
+<span class="fc" id="L167">                                PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, &quot;initiatedAt&quot;, &quot;id&quot;)))</span>
+<span class="fc" id="L168">                                .getContent().stream()</span>
+<span class="fc" id="L169">                                .map(t -&gt; toTxnSummary(t, wallet.getId()))</span>
+<span class="fc" id="L170">                                .toList();</span>
+
+<span class="fc" id="L172">                return new AdminUserDetailResponse(toAdminUserResponse(user), recent);</span>
+        }
+
+        public MessageResponse freezeWallet(Principal principal, @PathVariable Long userId,
+                        @RequestBody(required = false) WalletFreezeRequest ignoredRequest) {
+<span class="fc" id="L177">                walletService.setFrozenByAdmin(userId, true);</span>
+<span class="fc" id="L178">                audit(principal, &quot;FREEZE_WALLET&quot;, &quot;WALLET&quot;, userId);</span>
+<span class="fc" id="L179">                return new MessageResponse(&quot;Wallet frozen&quot;);</span>
+        }
+
+        public MessageResponse unfreezeWallet(Principal principal, @PathVariable Long userId,
+                        @RequestBody(required = false) WalletFreezeRequest ignoredRequest) {
+<span class="fc" id="L184">                walletService.setFrozenByAdmin(userId, false);</span>
+<span class="fc" id="L185">                audit(principal, &quot;UNFREEZE_WALLET&quot;, &quot;WALLET&quot;, userId);</span>
+<span class="fc" id="L186">                return new MessageResponse(&quot;Wallet unfrozen&quot;);</span>
+        }
+
+        // ── Transactions ─────────────────────────────────────────────────────────────
+        public PageResponse&lt;AdminTransactionResponse&gt; transactions(@ModelAttribute AdminTransactionFilter filter) {
+<span class="fc bfc" id="L191" title="All 2 branches covered.">                int pg = filter.page() == null ? 0 : Math.max(0, filter.page());</span>
+<span class="fc bfc" id="L192" title="All 2 branches covered.">                int sz = filter.size() == null ? 20 : Math.min(Math.max(1, filter.size()), 100);</span>
+
+<span class="fc" id="L194">                Specification&lt;Transaction&gt; spec = (root, query, cb) -&gt; {</span>
+<span class="nc" id="L195">                        List&lt;Predicate&gt; preds = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L196" title="All 2 branches missed.">                        if (filter.fromDate() != null)</span>
+<span class="nc" id="L197">                                preds.add(cb.greaterThanOrEqualTo(root.get(&quot;initiatedAt&quot;),</span>
+<span class="nc" id="L198">                                                filter.fromDate().atStartOfDay(IST).toOffsetDateTime()));</span>
+<span class="nc bnc" id="L199" title="All 2 branches missed.">                        if (filter.toDate() != null)</span>
+<span class="nc" id="L200">                                preds.add(cb.lessThan(root.get(&quot;initiatedAt&quot;),</span>
+<span class="nc" id="L201">                                                filter.toDate().plusDays(1).atStartOfDay(IST).toOffsetDateTime()));</span>
+<span class="nc bnc" id="L202" title="All 4 branches missed.">                        if (filter.status() != null &amp;&amp; filter.status() != TransactionStatusFilter.ALL)</span>
+<span class="nc" id="L203">                                preds.add(cb.equal(root.get(&quot;status&quot;),</span>
+<span class="nc" id="L204">                                                TransactionStatus.valueOf(filter.status().name())));</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">                        if (filter.minAmount() != null)</span>
+<span class="nc" id="L206">                                preds.add(cb.greaterThanOrEqualTo(root.get(&quot;amount&quot;), filter.minAmount()));</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">                        if (filter.maxAmount() != null)</span>
+<span class="nc" id="L208">                                preds.add(cb.lessThanOrEqualTo(root.get(&quot;amount&quot;), filter.maxAmount()));</span>
+<span class="nc" id="L209">                        return cb.and(preds.toArray(new Predicate[0]));</span>
+                };
+
+<span class="fc" id="L212">                Page&lt;Transaction&gt; result = transactionRepository.findAll(spec,</span>
+<span class="fc" id="L213">                                PageRequest.of(pg, sz, Sort.by(Sort.Direction.DESC, &quot;initiatedAt&quot;, &quot;id&quot;)));</span>
+
+<span class="fc" id="L215">                List&lt;AdminTransactionResponse&gt; content = result.getContent().stream()</span>
+<span class="fc" id="L216">                                .map(t -&gt; new AdminTransactionResponse(</span>
+<span class="fc" id="L217">                                                t.getId(),</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">                                                t.getSenderWallet() == null ? null</span>
+<span class="fc" id="L219">                                                                : t.getSenderWallet().getUser().getName(),</span>
+<span class="fc" id="L220">                                                t.getReceiverWallet().getUser().getName(),</span>
+<span class="fc" id="L221">                                                t.getAmount(), t.getStatus(),</span>
+<span class="fc" id="L222">                                                Boolean.TRUE.equals(t.getFlagged()),</span>
+<span class="fc" id="L223">                                                toInstant(t.getInitiatedAt()), t.getSettlementDueDate()))</span>
+<span class="fc" id="L224">                                .toList();</span>
+
+<span class="fc" id="L226">                return new PageResponse&lt;&gt;(content, result.getNumber(), result.getSize(),</span>
+<span class="fc" id="L227">                                result.getTotalElements(), result.getTotalPages());</span>
+        }
+
+        public AdminTransactionDetailResponse transactionDetail(@PathVariable Long id) {
+<span class="fc" id="L231">                Transaction t = transactionRepository.findById(id)</span>
+<span class="fc" id="L232">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND,</span>
+<span class="fc" id="L233">                                                &quot;Transaction not found&quot;));</span>
+
+<span class="fc" id="L235">                List&lt;LedgerEntryResponse&gt; entries = ledgerEntryRepository</span>
+<span class="fc" id="L236">                                .findByTransactionIdOrderByCreatedAtAsc(id).stream()</span>
+<span class="fc" id="L237">                                .map(e -&gt; new LedgerEntryResponse(e.getId(), e.getWallet().getId(),</span>
+<span class="fc" id="L238">                                                e.getEntryType(), e.getAmount(), e.getBalanceAfter(),</span>
+<span class="fc" id="L239">                                                toInstant(e.getCreatedAt())))</span>
+<span class="fc" id="L240">                                .toList();</span>
+
+<span class="fc" id="L242">                return new AdminTransactionDetailResponse(</span>
+<span class="fc" id="L243">                                t.getId(), t.getRequestId(), t.getType(),</span>
+<span class="pc bpc" id="L244" title="1 of 2 branches missed.">                                t.getSenderWallet() == null ? null : t.getSenderWallet().getUser().getId(),</span>
+<span class="pc bpc" id="L245" title="1 of 2 branches missed.">                                t.getSenderWallet() == null ? null : t.getSenderWallet().getUser().getName(),</span>
+<span class="fc" id="L246">                                t.getReceiverWallet().getUser().getId(),</span>
+<span class="fc" id="L247">                                t.getReceiverWallet().getUser().getName(),</span>
+<span class="fc" id="L248">                                t.getAmount(), t.getRemark(), t.getStatus(), t.getFailureReason(),</span>
+<span class="fc" id="L249">                                Boolean.TRUE.equals(t.getFlagged()),</span>
+<span class="fc" id="L250">                                toInstant(t.getInitiatedAt()), t.getSettlementDueDate(),</span>
+<span class="fc" id="L251">                                toInstant(t.getSettledAt()),</span>
+<span class="pc bpc" id="L252" title="1 of 2 branches missed.">                                t.getSettlementBatch() == null ? null : t.getSettlementBatch().getId(),</span>
+<span class="fc" id="L253">                                entries);</span>
+        }
+
+        // ── Settlement monitor
+        // ────────────────────────────────────────────────────────
+        public SettlementMonitorResponse settlements() {
+<span class="fc" id="L259">                LocalDate today = WalletService.today();</span>
+<span class="fc" id="L260">                List&lt;Transaction&gt; all = transactionRepository.findAll(</span>
+<span class="pc" id="L261">                                (root, query, cb) -&gt; cb.and(</span>
+<span class="nc" id="L262">                                                cb.equal(root.get(&quot;type&quot;), TransactionType.TRANSFER),</span>
+<span class="nc" id="L263">                                                cb.equal(root.get(&quot;status&quot;), TransactionStatus.PENDING)));</span>
+
+<span class="fc" id="L265">                long dueToday = all.stream().filter(t -&gt; today.equals(t.getSettlementDueDate())).count();</span>
+<span class="fc" id="L266">                long dueTomorrow = all.stream().filter(t -&gt; today.plusDays(1).equals(t.getSettlementDueDate())).count();</span>
+<span class="fc bfc" id="L267" title="All 2 branches covered.">                long overdue = all.stream().filter(t -&gt; t.getSettlementDueDate() != null</span>
+<span class="fc bfc" id="L268" title="All 2 branches covered.">                                &amp;&amp; t.getSettlementDueDate().isBefore(today)).count();</span>
+<span class="fc" id="L269">                BigDecimal total = all.stream().map(Transaction::getAmount)</span>
+<span class="fc" id="L270">                                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+
+<span class="fc" id="L272">                List&lt;AdminTransactionResponse&gt; txns = all.stream()</span>
+<span class="fc" id="L273">                                .sorted((a, b) -&gt; {</span>
+<span class="fc bfc" id="L274" title="All 2 branches covered.">                                        if (a.getSettlementDueDate() == null)</span>
+<span class="fc" id="L275">                                                return 1;</span>
+<span class="pc bpc" id="L276" title="1 of 2 branches missed.">                                        if (b.getSettlementDueDate() == null)</span>
+<span class="nc" id="L277">                                                return -1;</span>
+<span class="fc" id="L278">                                        return a.getSettlementDueDate().compareTo(b.getSettlementDueDate());</span>
+                                })
+<span class="fc" id="L280">                                .map(t -&gt; new AdminTransactionResponse(</span>
+<span class="fc" id="L281">                                                t.getId(),</span>
+<span class="fc bfc" id="L282" title="All 2 branches covered.">                                                t.getSenderWallet() == null ? null</span>
+<span class="fc" id="L283">                                                                : t.getSenderWallet().getUser().getName(),</span>
+<span class="fc" id="L284">                                                t.getReceiverWallet().getUser().getName(),</span>
+<span class="fc" id="L285">                                                t.getAmount(), t.getStatus(),</span>
+<span class="fc" id="L286">                                                Boolean.TRUE.equals(t.getFlagged()),</span>
+<span class="fc" id="L287">                                                toInstant(t.getInitiatedAt()), t.getSettlementDueDate()))</span>
+<span class="fc" id="L288">                                .toList();</span>
+
+<span class="fc" id="L290">                return new SettlementMonitorResponse(dueToday, dueTomorrow, overdue, total, txns);</span>
+        }
+
+        /** Manually settle a single pending transaction immediately. */
+        public MessageResponse manualSettle(Principal principal, @PathVariable Long id) {
+<span class="fc" id="L295">                SettlementOutcome outcome = settlementService.settle(id, null);</span>
+
+<span class="fc" id="L297">                audit(principal, &quot;MANUAL_SETTLE&quot;, &quot;TRANSACTION&quot;, id);</span>
+<span class="fc bfc" id="L298" title="All 3 branches covered.">                return switch (outcome) {</span>
+<span class="fc" id="L299">                        case SETTLED -&gt; new MessageResponse(&quot;Transaction settled successfully&quot;);</span>
+<span class="fc" id="L300">                        case DECLINED -&gt; new MessageResponse(&quot;Settlement declined: receiver wallet is not active&quot;);</span>
+<span class="fc" id="L301">                        case SKIPPED -&gt; new MessageResponse(&quot;Transaction was already processed&quot;);</span>
+                };
+        }
+
+        // ── Fraud alerts
+        // ──────────────────────────────────────────────────────────────
+        public List&lt;FraudAlertResponse&gt; fraudAlerts(
+                        @RequestParam(defaultValue = &quot;PENDING&quot;) FraudAlertStatus status) {
+<span class="fc" id="L309">                return fraudAdminService.list(status);</span>
+        }
+
+        public FraudAlertResponse reviewFraudAlert(Principal principal, @PathVariable Long alertId,
+                        @Valid @RequestBody FraudReviewRequest request) {
+<span class="fc" id="L314">                FraudAlertResponse result = fraudAdminService.review(principal.getName(), alertId, request);</span>
+<span class="fc" id="L315">                audit(principal, &quot;FRAUD_REVIEW_&quot; + request.action().name(), &quot;FRAUD_ALERT&quot;, alertId);</span>
+<span class="fc" id="L316">                return result;</span>
+        }
+
+        // ── Job monitor
+        // ───────────────────────────────────────────────────────────────
+        public List&lt;JobRunResponse&gt; jobs(@RequestParam(required = false) String jobName) {
+<span class="fc" id="L322">                return scheduledJobLogRepository.findAll(Sort.by(Sort.Direction.DESC, &quot;startedAt&quot;))</span>
+<span class="fc" id="L323">                                .stream()</span>
+<span class="pc bpc" id="L324" title="1 of 6 branches missed.">                                .filter(j -&gt; jobName == null || jobName.isBlank() || j.getJobName().equals(jobName))</span>
+<span class="fc" id="L325">                                .limit(20)</span>
+<span class="fc" id="L326">                                .map(j -&gt; {</span>
+<span class="fc" id="L327">                                        SettlementBatch batch = settlementBatchRepository.findByJobLogId(j.getId())</span>
+<span class="fc" id="L328">                                                        .orElse(null);</span>
+<span class="fc bfc" id="L329" title="All 2 branches covered.">                                        SettlementBatchResponse batchResponse = batch == null ? null</span>
+<span class="fc" id="L330">                                                        : new SettlementBatchResponse(</span>
+<span class="fc" id="L331">                                                                        batch.getId(),</span>
+<span class="pc bpc" id="L332" title="1 of 2 branches missed.">                                                                        batch.getSettledCount() == null ? 0</span>
+<span class="nc" id="L333">                                                                                        : batch.getSettledCount(),</span>
+<span class="pc bpc" id="L334" title="1 of 2 branches missed.">                                                                        batch.getFailedCount() == null ? 0</span>
+<span class="nc" id="L335">                                                                                        : batch.getFailedCount(),</span>
+<span class="pc bpc" id="L336" title="1 of 2 branches missed.">                                                                        batch.getDeclinedCount() == null ? 0</span>
+<span class="nc" id="L337">                                                                                        : batch.getDeclinedCount(),</span>
+<span class="pc bpc" id="L338" title="1 of 2 branches missed.">                                                                        batch.getTotalAmountSettled() == null</span>
+<span class="fc" id="L339">                                                                                        ? BigDecimal.ZERO</span>
+<span class="nc" id="L340">                                                                                        : batch.getTotalAmountSettled());</span>
+<span class="fc" id="L341">                                        return new JobRunResponse(</span>
+<span class="fc" id="L342">                                                        j.getId(), j.getJobName(),</span>
+<span class="fc" id="L343">                                                        toInstant(j.getStartedAt()), toInstant(j.getEndedAt()),</span>
+<span class="fc" id="L344">                                                        j.getStatus(),</span>
+<span class="fc bfc" id="L345" title="All 2 branches covered.">                                                        j.getRecordsProcessed() == null ? 0 : j.getRecordsProcessed(),</span>
+<span class="fc" id="L346">                                                        j.getErrorMessage(),</span>
+<span class="fc" id="L347">                                                        batchResponse);</span>
+                                })
+<span class="fc" id="L349">                                .toList();</span>
+        }
+
+        // ── Reconciliation
+        // ────────────────────────────────────────────────────────────
+        public ReconciliationResponse reconciliation(
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+<span class="fc bfc" id="L357" title="All 2 branches covered.">                LocalDate target = date != null ? date : WalletService.today();</span>
+<span class="fc" id="L358">                OffsetDateTime from = target.atStartOfDay(IST).toOffsetDateTime();</span>
+<span class="fc" id="L359">                OffsetDateTime to = target.plusDays(1).atStartOfDay(IST).toOffsetDateTime();</span>
+
+<span class="fc" id="L361">                BigDecimal debits = orZero(ledgerEntryRepository.sumForSettled(</span>
+<span class="fc" id="L362">                                LedgerEntryType.DEBIT, TransactionType.TRANSFER, TransactionStatus.SUCCESS, from, to));</span>
+<span class="fc" id="L363">                BigDecimal credits = orZero(ledgerEntryRepository.sumCreditSideForSettled(</span>
+<span class="fc" id="L364">                                TransactionType.TRANSFER, TransactionStatus.SUCCESS, from, to));</span>
+<span class="fc" id="L365">                BigDecimal pendingAmt = orZero(transactionRepository.sumByStatus(</span>
+<span class="fc" id="L366">                                TransactionType.TRANSFER, TransactionStatus.PENDING));</span>
+
+<span class="fc bfc" id="L368" title="All 2 branches covered.">                boolean mismatch = debits.compareTo(credits) != 0;</span>
+<span class="fc" id="L369">                BigDecimal diff = debits.subtract(credits).abs();</span>
+
+<span class="fc" id="L371">                return new ReconciliationResponse(target, debits, credits, pendingAmt, mismatch, diff);</span>
+        }
+
+        // ── Daily Summary ────────────────────────────────────────────────────────────
+        public List&lt;DailySummaryResponse&gt; dailySummaries(int limit) {
+<span class="fc" id="L376">                int cap = Math.min(Math.max(1, limit), 90);</span>
+<span class="fc" id="L377">                return dailySummaryRepository</span>
+<span class="fc" id="L378">                                .findAll(Sort.by(Sort.Direction.DESC, &quot;summaryDate&quot;))</span>
+<span class="fc" id="L379">                                .stream()</span>
+<span class="fc" id="L380">                                .limit(cap)</span>
+<span class="fc" id="L381">                                .map(s -&gt; new DailySummaryResponse(</span>
+<span class="fc" id="L382">                                                s.getSummaryDate(),</span>
+<span class="fc bfc" id="L383" title="All 2 branches covered.">                                                s.getTransfersInitiated() != null ? s.getTransfersInitiated() : 0,</span>
+<span class="fc" id="L384">                                                orZero(s.getInitiatedAmount()),</span>
+<span class="fc bfc" id="L385" title="All 2 branches covered.">                                                s.getTransfersSettled() != null ? s.getTransfersSettled() : 0,</span>
+<span class="fc" id="L386">                                                orZero(s.getSettledAmount()),</span>
+<span class="fc bfc" id="L387" title="All 2 branches covered.">                                                s.getFraudAlertsRaised() != null ? s.getFraudAlertsRaised() : 0,</span>
+<span class="fc bfc" id="L388" title="All 2 branches covered.">                                                s.getNewRegistrations() != null ? s.getNewRegistrations() : 0,</span>
+<span class="fc" id="L389">                                                orZero(s.getPendingSettlementAmount()),</span>
+<span class="fc" id="L390">                                                Boolean.TRUE.equals(s.getReconciliationOk())))</span>
+<span class="fc" id="L391">                                .toList();</span>
+        }
+
+        // ── Helpers
+        // ───────────────────────────────────────────────────────────────────
+
+        private void audit(Principal principal, String action, String targetType, Long targetId) {
+                try {
+<span class="fc" id="L399">                        AuditLog log = new AuditLog();</span>
+<span class="fc" id="L400">                        log.setAction(action);</span>
+<span class="fc" id="L401">                        log.setTargetType(targetType);</span>
+<span class="fc" id="L402">                        log.setTargetId(targetId);</span>
+<span class="fc" id="L403">                        log.setDetails(Map.of());</span>
+<span class="fc" id="L404">                        log.setCreatedAt(OffsetDateTime.now());</span>
+<span class="fc bfc" id="L405" title="All 2 branches covered.">                        if (principal != null) {</span>
+<span class="fc" id="L406">                                userRepository.findByEmail(principal.getName()).ifPresent(log::setAdmin);</span>
+                        }
+<span class="fc" id="L408">                        auditLogRepository.saveAndFlush(log);</span>
+<span class="fc" id="L409">                } catch (Exception exception) {</span>
+                        // Audit failures must not break the main operation, but must be visible.
+<span class="fc" id="L411">                        logger.error(&quot;Failed to persist audit log: action={}, targetType={}, targetId={}, principal={}&quot;,</span>
+<span class="fc" id="L412">                                        action, targetType, targetId,</span>
+<span class="pc bpc" id="L413" title="1 of 2 branches missed.">                                        principal == null ? null : principal.getName(), exception);</span>
+                }
+<span class="fc" id="L415">        }</span>
+
+        private AdminUserResponse toAdminUserResponse(User u) {
+<span class="fc" id="L418">                Wallet w = walletRepository.findByUserId(u.getId()).orElse(null);</span>
+<span class="fc" id="L419">                return new AdminUserResponse(</span>
+<span class="fc" id="L420">                                u.getId(), u.getName(), u.getEmail(), u.getPhone(), u.getRole(),</span>
+<span class="fc bfc" id="L421" title="All 2 branches covered.">                                w != null ? w.getBalance() : BigDecimal.ZERO,</span>
+<span class="fc bfc" id="L422" title="All 2 branches covered.">                                w != null ? w.getStatus() : WalletStatus.INACTIVE,</span>
+<span class="fc" id="L423">                                toInstant(u.getCreatedAt()));</span>
+        }
+
+        private TransactionSummaryResponse toTxnSummary(Transaction t, Long myWalletId) {
+<span class="fc bfc" id="L427" title="All 4 branches covered.">                boolean sent = t.getSenderWallet() != null &amp;&amp; t.getSenderWallet().getId().equals(myWalletId);</span>
+<span class="fc bfc" id="L428" title="All 2 branches covered.">                String counterparty = sent</span>
+<span class="fc" id="L429">                                ? t.getReceiverWallet().getUser().getName()</span>
+<span class="fc bfc" id="L430" title="All 2 branches covered.">                                : (t.getSenderWallet() == null ? &quot;Top-up&quot; : t.getSenderWallet().getUser().getName());</span>
+<span class="fc bfc" id="L431" title="All 2 branches covered.">                boolean pending = t.getStatus() == TransactionStatus.PENDING;</span>
+<span class="fc" id="L432">                return new TransactionSummaryResponse(</span>
+<span class="fc" id="L433">                                t.getId(), t.getType(),</span>
+<span class="fc bfc" id="L434" title="All 2 branches covered.">                                sent ? TransactionDirection.SENT : TransactionDirection.RECEIVED,</span>
+<span class="fc" id="L435">                                counterparty, t.getAmount(), t.getRemark(), t.getStatus(),</span>
+<span class="fc" id="L436">                                toInstant(t.getInitiatedAt()),</span>
+<span class="fc bfc" id="L437" title="All 2 branches covered.">                                pending ? t.getSettlementDueDate() : null,</span>
+<span class="fc" id="L438">                                daysRemaining(t));</span>
+        }
+
+        private static Long daysRemaining(Transaction t) {
+<span class="pc bpc" id="L442" title="1 of 4 branches missed.">                if (t.getStatus() != TransactionStatus.PENDING || t.getSettlementDueDate() == null)</span>
+<span class="fc" id="L443">                        return null;</span>
+<span class="fc" id="L444">                return Math.max(0, ChronoUnit.DAYS.between(WalletService.today(), t.getSettlementDueDate()));</span>
+        }
+
+        private static Instant toInstant(OffsetDateTime v) {
+<span class="fc" id="L448">                return Optional.ofNullable(v).map(OffsetDateTime::toInstant).orElse(null);</span>
+        }
+
+        private static BigDecimal orZero(BigDecimal v) {
+<span class="fc bfc" id="L452" title="All 2 branches covered.">                return v == null ? BigDecimal.ZERO : v;</span>
+        }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

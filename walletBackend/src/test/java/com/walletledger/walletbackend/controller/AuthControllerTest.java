@@ -50,6 +50,21 @@ class AuthControllerTest {
     }
 
     @Test
+    void registerAdminReturnsCreatedWithTokens() {
+        RegisterRequest request = new RegisterRequest("Admin", "admin@example.com", "9876543211", "admin123", "1234");
+        UserProfileResponse profile = new UserProfileResponse(2L, "Admin", "admin@example.com", "9876543211", UserRole.ADMIN);
+        LoginResponse expected = new LoginResponse("access-token", "refresh-token", "Bearer", 900, profile);
+
+        when(authService.registerAdmin(any(RegisterRequest.class))).thenReturn(expected);
+
+        ResponseEntity<LoginResponse> response = authController.registerAdmin(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("access-token", response.getBody().token());
+    }
+
+    @Test
     void loginReturnsOkWithTokens() {
         LoginRequest request = new LoginRequest("bob@example.com", "password123");
         UserProfileResponse profile = new UserProfileResponse(1L, "Bob", "bob@example.com", "9876543210", UserRole.USER);

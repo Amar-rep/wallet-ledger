@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CustomUserDetails.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.security</a> &gt; <span class="el_source">CustomUserDetails.java</span></div><h1>CustomUserDetails.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.security;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.time.OffsetDateTime;
+
+import com.walletledger.walletbackend.entity.User;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+public class CustomUserDetails implements UserDetails {
+
+    private final User user;
+
+<span class="fc" id="L16">    public CustomUserDetails(User user) {</span>
+<span class="fc" id="L17">        this.user = user;</span>
+<span class="fc" id="L18">    }</span>
+
+    public User getUser() {
+<span class="fc" id="L21">        return user;</span>
+    }
+
+    public Long getId() {
+<span class="fc" id="L25">        return user.getId();</span>
+    }
+
+    @Override
+    public Collection&lt;? extends GrantedAuthority&gt; getAuthorities() {
+<span class="fc bfc" id="L30" title="All 2 branches covered.">        String roleName = user.getRole() != null ? &quot;ROLE_&quot; + user.getRole().name() : &quot;ROLE_USER&quot;;</span>
+<span class="fc" id="L31">        return Collections.singletonList(new SimpleGrantedAuthority(roleName));</span>
+    }
+
+    @Override
+    public String getPassword() {
+<span class="fc" id="L36">        return user.getPasswordHash();</span>
+    }
+
+    @Override
+    public String getUsername() {
+<span class="fc" id="L41">        return user.getEmail();</span>
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+<span class="fc" id="L46">        return true;</span>
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+<span class="fc bfc" id="L51" title="All 4 branches covered.">        return user.getLockedAt() == null || !user.getLockedAt().plusMinutes(30).isAfter(OffsetDateTime.now());</span>
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+<span class="fc" id="L56">        return true;</span>
+    }
+
+    @Override
+    public boolean isEnabled() {
+<span class="fc" id="L61">        return true;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

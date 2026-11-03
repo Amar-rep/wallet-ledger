@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WalletLockService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.service</a> &gt; <span class="el_source">WalletLockService.java</span></div><h1>WalletLockService.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.service;
+
+import java.util.Arrays;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+import com.walletledger.walletbackend.entity.Wallet;
+import com.walletledger.walletbackend.exception.BusinessRuleException;
+import com.walletledger.walletbackend.repository.WalletRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+/**
+ * Acquires pessimistic write-locks on a set of wallets in ascending ID order.
+ * Always locking in the same order prevents deadlocks between opposing transfers
+ * even when the system wallet is one of the participants.
+ */
+@Service
+@RequiredArgsConstructor
+public class WalletLockService {
+
+    private final WalletRepository walletRepository;
+
+    /**
+     * Lock all given wallet IDs in ascending order.
+     *
+     * @param walletIds one or more wallet IDs (duplicates are de-duplicated)
+     * @return map from wallet ID to the locked Wallet entity
+     */
+    public Map&lt;Long, Wallet&gt; lockInOrder(Long... walletIds) {
+<span class="fc" id="L33">        Map&lt;Long, Wallet&gt; result = new TreeMap&lt;&gt;();</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">        for (Long id : new TreeSet&lt;&gt;(Arrays.asList(walletIds))) {</span>
+<span class="fc" id="L35">            result.put(id, walletRepository.findByIdForUpdate(id)</span>
+<span class="fc" id="L36">                    .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND,</span>
+<span class="fc" id="L37">                            &quot;Wallet &quot; + id + &quot; not found&quot;)));</span>
+        }
+<span class="fc" id="L39">        return result;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

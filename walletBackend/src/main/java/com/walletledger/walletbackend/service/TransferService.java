@@ -52,6 +52,7 @@ public class TransferService {
         private final FraudAlertRepository fraudAlertRepository;
         private final NotificationService notificationService;
         private final PasswordEncoder passwordEncoder;
+        private final FlexService flexService;
 
         @Transactional(readOnly = true)
         public UserSearchResponse search(String currentUserEmail, String query) {
@@ -165,6 +166,17 @@ public class TransferService {
                                                         + sender.getId(),
                                         transaction);
                 }
+
+                // Flex Instant Credit — attempt disbursement in the same transaction
+                if (flexService.isEligible(receiverWallet, amount, Boolean.TRUE.equals(transaction.getFlagged()))) {
+                        flexService.disburse(transaction, senderWallet, receiverWallet);
+                        notificationService.notifyUser(receiver.getId(), NotificationType.TRANSFER_INITIATED,
+                                        NotificationSeverity.INFO,
+                                        money(amount) + " from " + sender.getName()
+                                                        + " is available now via Flex Instant Credit.",
+                                        transaction);
+                }
+
                 return toResponse(transaction,
                                 "Transfer initiated. Expected settlement on " + transaction.getSettlementDueDate());
         }

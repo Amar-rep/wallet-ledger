@@ -99,8 +99,12 @@ export default function AdminTransactionDetailPage() {
           <CopyBtn value={t.requestId} label="Request ID"/>
         </DetailRow>
         <DetailRow label="Initiated">{formatDateTimeIST(t.initiatedAt)}</DetailRow>
-        <DetailRow label="Settlement due">{formatDateOnly(t.settlementDueDate)}</DetailRow>
-        <DetailRow label="Settled">{t.settledAt ? formatDateTimeIST(t.settledAt) : <span className="text-slate-400">Pending</span>}</DetailRow>
+        {!showFailure && t.settlementDueDate && (
+          <DetailRow label="Settlement due">{formatDateOnly(t.settlementDueDate)}</DetailRow>
+        )}
+        {!showFailure && (
+          <DetailRow label="Settled">{t.settledAt ? formatDateTimeIST(t.settledAt) : <span className="text-amber-600 font-normal">Pending</span>}</DetailRow>
+        )}
         {t.settlementBatchId && (
           <DetailRow label="Settlement batch">
             <span className="font-mono text-xs">#{t.settlementBatchId}</span>

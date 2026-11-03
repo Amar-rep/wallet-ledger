@@ -14,6 +14,10 @@ import com.walletledger.walletbackend.dto.request.SendMoneyRequest;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import java.util.stream.Stream;
 
 class DtoValidationTest {
 
@@ -42,6 +46,17 @@ class DtoValidationTest {
 
         assertTrue(validator.validate(valid).isEmpty());
         assertFalse(validator.validate(invalid).isEmpty());
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidAmounts")
+    void addMoneyRequestRejectsAmountsBelowOneRupee(BigDecimal amount) {
+        assertFalse(validator.validate(new AddMoneyRequest(amount)).isEmpty());
+    }
+
+    static Stream<Arguments> invalidAmounts() {
+        return Stream.of(Arguments.of(BigDecimal.ZERO), Arguments.of(new BigDecimal("0.01")),
+                Arguments.of(new BigDecimal("0.99")), Arguments.of(new BigDecimal("-1.00")));
     }
 
     @Test

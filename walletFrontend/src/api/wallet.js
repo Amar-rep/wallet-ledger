@@ -4,4 +4,5 @@ export const walletApi = {
   get: () => api.get('/wallet').then((r) => r.data),
   addMoney: (amount) => api.post('/wallet/add-money', { amount }).then((r) => r.data),
   updateStatus: (status) => api.patch('/wallet/status', { status }).then((r) => r.data),
+  toggleFlex: () => api.post('/wallet/flex/toggle').then((r) => r.data),
 }

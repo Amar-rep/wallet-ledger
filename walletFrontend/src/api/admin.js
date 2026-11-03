@@ -32,6 +32,10 @@ export const adminApi = {
   reconciliation: (date) =>
     api.get('/admin/reconciliation', { params: date ? { date } : {} }).then((r) => r.data),
 
+  // Daily summaries
+  dailySummaries: (limit = 30) =>
+    api.get('/admin/daily-summaries', { params: { limit } }).then((r) => r.data),
+
   // Admin register (requires admin token)
   registerAdmin: (data) => api.post('/auth/register/admin', data).then((r) => r.data),
 }

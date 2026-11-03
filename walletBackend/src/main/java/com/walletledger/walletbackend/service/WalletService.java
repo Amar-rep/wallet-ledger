@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.UUID;
 
+import com.walletledger.walletbackend.config.FlexProperties;
 import com.walletledger.walletbackend.dto.enums.LedgerEntryType;
 import com.walletledger.walletbackend.dto.enums.TransactionStatus;
 import com.walletledger.walletbackend.dto.enums.TransactionType;
@@ -36,6 +37,8 @@ public class WalletService {
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final FlexService flexService;
+    private final FlexProperties flexProperties;
 
     @Transactional(readOnly = true)
     public WalletResponse getWallet(String email) {
@@ -49,10 +52,9 @@ public class WalletService {
         requireActive(wallet, "add money to");
 
         OffsetDateTime now = OffsetDateTime.now();
-        wallet.setBalance(wallet.getBalance().add(request.amount()));
-        wallet.setUpdatedAt(now);
-        walletRepository.save(wallet);
 
+        // Create and persist the transaction first so it has an ID before
+        // repayDebtFromInbound links ledger entries to it.
         Transaction transaction = new Transaction();
         transaction.setRequestId(UUID.randomUUID().toString());
         transaction.setType(TransactionType.ADD_MONEY);
@@ -64,7 +66,16 @@ public class WalletService {
         transaction.setSettledAt(now);
         transactionRepository.save(transaction);
 
-        saveLedger(transaction, wallet, LedgerEntryType.CREDIT, request.amount(), wallet.getBalance());
+        // Repay any Flex debt from this top-up before crediting the remainder
+        BigDecimal net = flexProperties.isEnabled()
+                ? flexService.repayDebtFromInbound(wallet, request.amount(), transaction)
+                : request.amount();
+
+        wallet.setBalance(wallet.getBalance().add(net));
+        wallet.setUpdatedAt(now);
+        walletRepository.save(wallet);
+
+        saveLedger(transaction, wallet, LedgerEntryType.CREDIT, net, wallet.getBalance());
         return toResponse(wallet);
     }
 
@@ -111,7 +122,10 @@ public class WalletService {
         }
     }
 
-    /** Resets the persisted daily counter before a new day's first outgoing transfer. */
+    /**
+     * Resets the persisted daily counter before a new day's first outgoing
+     * transfer.
+     */
     public static void resetDailySpentIfNeeded(Wallet wallet) {
         LocalDate today = today();
         if (!today.equals(wallet.getDailySpentDate())) {
@@ -141,12 +155,26 @@ public class WalletService {
 
     private WalletResponse toResponse(Wallet wallet) {
         BigDecimal todaySpending = today().equals(wallet.getDailySpentDate())
-                ? wallet.getDailySpent() : BigDecimal.ZERO;
-        return new WalletResponse(wallet.getId(), wallet.getBalance(), todaySpending, wallet.getStatus());
+                ? wallet.getDailySpent()
+                : BigDecimal.ZERO;
+        BigDecimal flexDebt = wallet.getFlexDebt() != null ? wallet.getFlexDebt() : BigDecimal.ZERO;
+        return new WalletResponse(wallet.getId(), wallet.getBalance(), todaySpending,
+                wallet.getStatus(), wallet.isFlexEnabled(), flexDebt);
+    }
+
+    @Transactional
+    public com.walletledger.walletbackend.dto.common.MessageResponse toggleFlex(String email) {
+        Wallet wallet = walletForUserForUpdate(userByEmail(email).getId());
+        wallet.setFlexEnabled(!wallet.isFlexEnabled());
+        wallet.setUpdatedAt(OffsetDateTime.now());
+        walletRepository.save(wallet);
+        String state = wallet.isFlexEnabled() ? "enabled" : "disabled";
+        return new com.walletledger.walletbackend.dto.common.MessageResponse(
+                "Flex Instant Credit " + state + ".");
     }
 
     private void saveLedger(Transaction transaction, Wallet wallet, LedgerEntryType type,
-                            BigDecimal amount, BigDecimal balanceAfter) {
+            BigDecimal amount, BigDecimal balanceAfter) {
         LedgerEntry ledgerEntry = new LedgerEntry();
         ledgerEntry.setTransaction(transaction);
         ledgerEntry.setWallet(wallet);

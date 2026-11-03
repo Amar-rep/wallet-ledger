@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JobRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.scheduler</a> &gt; <span class="el_source">JobRunner.java</span></div><h1>JobRunner.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.scheduler;
+
+import java.time.OffsetDateTime;
+
+import com.walletledger.walletbackend.dto.enums.ScheduledJobStatus;
+import com.walletledger.walletbackend.entity.ScheduledJobLog;
+import com.walletledger.walletbackend.repository.ScheduledJobLogRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+<span class="fc" id="L12">@Slf4j</span>
+@Component
+@RequiredArgsConstructor
+public class JobRunner {
+
+    private final ScheduledJobLogRepository scheduledJobLogRepository;
+
+    public void run(String jobName, JobWork work) {
+<span class="fc" id="L20">        ScheduledJobLog entry = new ScheduledJobLog();</span>
+<span class="fc" id="L21">        entry.setJobName(jobName);</span>
+<span class="fc" id="L22">        entry.setStartedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L23">        entry.setStatus(ScheduledJobStatus.RUNNING);</span>
+<span class="fc" id="L24">        entry.setRecordsProcessed(0);</span>
+<span class="fc" id="L25">        entry = scheduledJobLogRepository.save(entry);</span>
+
+        try {
+<span class="fc" id="L28">            JobResult result = work.execute(entry);</span>
+<span class="fc" id="L29">            entry.setStatus(ScheduledJobStatus.SUCCESS);</span>
+<span class="fc" id="L30">            entry.setRecordsProcessed(result.records());</span>
+<span class="fc" id="L31">            entry.setErrorMessage(result.message());</span>
+<span class="fc" id="L32">        } catch (Exception exception) {</span>
+<span class="fc" id="L33">            log.error(&quot;Job {} failed&quot;, jobName, exception);</span>
+<span class="fc" id="L34">            entry.setStatus(ScheduledJobStatus.FAILED);</span>
+<span class="fc" id="L35">            entry.setErrorMessage(truncate(exception.toString()));</span>
+        }
+<span class="fc" id="L37">        entry.setEndedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L38">        scheduledJobLogRepository.save(entry);</span>
+<span class="fc" id="L39">    }</span>
+
+    static String truncate(String value) {
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">        if (value == null) {</span>
+<span class="nc" id="L43">            return null;</span>
+        }
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">        return value.length() &gt; 1000 ? value.substring(0, 1000) : value;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

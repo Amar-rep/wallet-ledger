@@ -14,6 +14,7 @@ import com.walletledger.walletbackend.dto.response.AdminTransactionDetailRespons
 import com.walletledger.walletbackend.dto.response.AdminTransactionResponse;
 import com.walletledger.walletbackend.dto.response.AdminUserDetailResponse;
 import com.walletledger.walletbackend.dto.response.AdminUserResponse;
+import com.walletledger.walletbackend.dto.response.DailySummaryResponse;
 import com.walletledger.walletbackend.dto.response.DashboardResponse;
 import com.walletledger.walletbackend.dto.response.FraudAlertResponse;
 import com.walletledger.walletbackend.dto.response.JobRunResponse;
@@ -38,48 +39,81 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class AdminController {
-    private final AdminService adminService;
+        private final AdminService adminService;
 
-    @GetMapping("/dashboard")
-    public DashboardResponse dashboard() { return adminService.dashboard(); }
+        @GetMapping("/dashboard")
+        public DashboardResponse dashboard() {
+                return adminService.dashboard();
+        }
 
-    @GetMapping("/users")
-    public PageResponse<AdminUserResponse> users(@RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return adminService.users(search, page, size); }
+        @GetMapping("/users")
+        public PageResponse<AdminUserResponse> users(@RequestParam(required = false) String search,
+                        @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+                return adminService.users(search, page, size);
+        }
 
-    @GetMapping("/users/{userId}")
-    public AdminUserDetailResponse userDetail(@PathVariable Long userId) { return adminService.userDetail(userId); }
+        @GetMapping("/users/{userId}")
+        public AdminUserDetailResponse userDetail(@PathVariable Long userId) {
+                return adminService.userDetail(userId);
+        }
 
-    @PostMapping("/users/{userId}/freeze")
-    public MessageResponse freezeWallet(Principal principal, @PathVariable Long userId,
-            @RequestBody(required = false) WalletFreezeRequest ignoredRequest) { return adminService.freezeWallet(principal, userId, ignoredRequest); }
+        @PostMapping("/users/{userId}/freeze")
+        public MessageResponse freezeWallet(Principal principal, @PathVariable Long userId,
+                        @RequestBody(required = false) WalletFreezeRequest ignoredRequest) {
+                return adminService.freezeWallet(principal, userId, ignoredRequest);
+        }
 
-    @PostMapping("/users/{userId}/unfreeze")
-    public MessageResponse unfreezeWallet(Principal principal, @PathVariable Long userId,
-            @RequestBody(required = false) WalletFreezeRequest ignoredRequest) { return adminService.unfreezeWallet(principal, userId, ignoredRequest); }
+        @PostMapping("/users/{userId}/unfreeze")
+        public MessageResponse unfreezeWallet(Principal principal, @PathVariable Long userId,
+                        @RequestBody(required = false) WalletFreezeRequest ignoredRequest) {
+                return adminService.unfreezeWallet(principal, userId, ignoredRequest);
+        }
 
-    @GetMapping("/transactions")
-    public PageResponse<AdminTransactionResponse> transactions(@ModelAttribute AdminTransactionFilter filter) { return adminService.transactions(filter); }
+        @GetMapping("/transactions")
+        public PageResponse<AdminTransactionResponse> transactions(@ModelAttribute AdminTransactionFilter filter) {
+                return adminService.transactions(filter);
+        }
 
-    @GetMapping("/transactions/{id}")
-    public AdminTransactionDetailResponse transactionDetail(@PathVariable Long id) { return adminService.transactionDetail(id); }
+        @GetMapping("/transactions/{id}")
+        public AdminTransactionDetailResponse transactionDetail(@PathVariable Long id) {
+                return adminService.transactionDetail(id);
+        }
 
-    @GetMapping("/settlements")
-    public SettlementMonitorResponse settlements() { return adminService.settlements(); }
+        @GetMapping("/settlements")
+        public SettlementMonitorResponse settlements() {
+                return adminService.settlements();
+        }
 
-    @PostMapping("/transactions/{id}/settle")
-    public MessageResponse manualSettle(Principal principal, @PathVariable Long id) { return adminService.manualSettle(principal, id); }
+        @PostMapping("/transactions/{id}/settle")
+        public MessageResponse manualSettle(Principal principal, @PathVariable Long id) {
+                return adminService.manualSettle(principal, id);
+        }
 
-    @GetMapping("/fraud-alerts")
-    public List<FraudAlertResponse> fraudAlerts(@RequestParam(defaultValue = "PENDING") FraudAlertStatus status) { return adminService.fraudAlerts(status); }
+        @GetMapping("/fraud-alerts")
+        public List<FraudAlertResponse> fraudAlerts(@RequestParam(defaultValue = "PENDING") FraudAlertStatus status) {
+                return adminService.fraudAlerts(status);
+        }
 
-    @PostMapping("/fraud-alerts/{alertId}/review")
-    public FraudAlertResponse reviewFraudAlert(Principal principal, @PathVariable Long alertId,
-            @Valid @RequestBody FraudReviewRequest request) { return adminService.reviewFraudAlert(principal, alertId, request); }
+        @PostMapping("/fraud-alerts/{alertId}/review")
+        public FraudAlertResponse reviewFraudAlert(Principal principal, @PathVariable Long alertId,
+                        @Valid @RequestBody FraudReviewRequest request) {
+                return adminService.reviewFraudAlert(principal, alertId, request);
+        }
 
-    @GetMapping("/jobs")
-    public List<JobRunResponse> jobs(@RequestParam(required = false) String jobName) { return adminService.jobs(jobName); }
+        @GetMapping("/jobs")
+        public List<JobRunResponse> jobs(@RequestParam(required = false) String jobName) {
+                return adminService.jobs(jobName);
+        }
 
-    @GetMapping("/reconciliation")
-    public ReconciliationResponse reconciliation(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) { return adminService.reconciliation(date); }
+        @GetMapping("/reconciliation")
+        public ReconciliationResponse reconciliation(
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+                return adminService.reconciliation(date);
+        }
+
+        @GetMapping("/daily-summaries")
+        public List<DailySummaryResponse> dailySummaries(
+                        @RequestParam(defaultValue = "30") int limit) {
+                return adminService.dailySummaries(limit);
+        }
 }

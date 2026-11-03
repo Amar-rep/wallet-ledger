@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FlexConfigurationValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.config</a> &gt; <span class="el_source">FlexConfigurationValidator.java</span></div><h1>FlexConfigurationValidator.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.config;
+
+import java.math.BigDecimal;
+
+import com.walletledger.walletbackend.dto.enums.WalletKind;
+import com.walletledger.walletbackend.dto.enums.WalletStatus;
+import com.walletledger.walletbackend.entity.Wallet;
+import com.walletledger.walletbackend.repository.WalletRepository;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+/**
+ * Validates at startup that the configured system wallet is usable when
+ * flex.enabled=true. Fails fast rather than allowing a mis-configured float
+ * to corrupt balances at runtime.
+ */
+@Component
+@RequiredArgsConstructor
+public class FlexConfigurationValidator {
+
+    private final FlexProperties flex;
+    private final WalletRepository walletRepository;
+
+    @PostConstruct
+    public void validate() {
+<span class="fc bfc" id="L27" title="All 2 branches covered.">        if (!flex.isEnabled()) {</span>
+<span class="fc" id="L28">            return;</span>
+        }
+
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">        if (flex.getSystemWalletId() == null) {</span>
+<span class="nc" id="L32">            throw new IllegalStateException(</span>
+<span class="nc" id="L33">                    &quot;Flex is enabled but flex.system-wallet-id is not configured. &quot;</span>
+                            + &quot;Set FLEX_SYSTEM_WALLET_ID in your environment.&quot;);
+        }
+
+<span class="fc" id="L37">        Wallet systemWallet = walletRepository.findById(flex.getSystemWalletId())</span>
+<span class="fc" id="L38">                .orElseThrow(() -&gt; new IllegalStateException(</span>
+<span class="fc" id="L39">                        &quot;Flex system wallet with id=&quot; + flex.getSystemWalletId() + &quot; does not exist. &quot;</span>
+<span class="fc" id="L40">                                + &quot;Run the database migration and set FLEX_SYSTEM_WALLET_ID correctly.&quot;));</span>
+
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">        if (systemWallet.getUser() != null) {</span>
+<span class="nc" id="L43">            throw new IllegalStateException(</span>
+<span class="nc" id="L44">                    &quot;Flex system wallet id=&quot; + flex.getSystemWalletId()</span>
+                            + &quot; has a linked user. The system wallet must have user_id = NULL.&quot;);
+        }
+
+<span class="fc bfc" id="L48" title="All 2 branches covered.">        if (systemWallet.getWalletKind() != WalletKind.SYSTEM) {</span>
+<span class="fc" id="L49">            throw new IllegalStateException(</span>
+<span class="fc" id="L50">                    &quot;Flex system wallet id=&quot; + flex.getSystemWalletId()</span>
+<span class="fc" id="L51">                            + &quot; has wallet_kind=&quot; + systemWallet.getWalletKind()</span>
+                            + &quot;. Fix it with: UPDATE wallets SET wallet_kind='SYSTEM' WHERE id=&quot;
+<span class="fc" id="L53">                            + flex.getSystemWalletId() + &quot;;&quot;);</span>
+        }
+
+<span class="fc bfc" id="L56" title="All 2 branches covered.">        if (systemWallet.getStatus() != WalletStatus.ACTIVE) {</span>
+<span class="fc" id="L57">            throw new IllegalStateException(</span>
+<span class="fc" id="L58">                    &quot;Flex system wallet id=&quot; + flex.getSystemWalletId()</span>
+<span class="fc" id="L59">                            + &quot; is not ACTIVE (status=&quot; + systemWallet.getStatus() + &quot;).&quot;);</span>
+        }
+
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">        if (systemWallet.getBalance().compareTo(BigDecimal.ZERO) &lt; 0) {</span>
+<span class="fc" id="L63">            throw new IllegalStateException(</span>
+<span class="fc" id="L64">                    &quot;Flex system wallet id=&quot; + flex.getSystemWalletId()</span>
+                            + &quot; has a negative balance. Inspect the system wallet before enabling Flex.&quot;);
+        }
+<span class="nc" id="L67">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

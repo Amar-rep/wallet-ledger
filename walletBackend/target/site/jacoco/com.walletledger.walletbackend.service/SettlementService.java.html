@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SettlementService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">wallet-backend</a> &gt; <a href="index.source.html" class="el_package">com.walletledger.walletbackend.service</a> &gt; <span class="el_source">SettlementService.java</span></div><h1>SettlementService.java</h1><pre class="source lang-java linenums">package com.walletledger.walletbackend.service;
+
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.time.OffsetDateTime;
+import java.util.Locale;
+import java.util.Map;
+
+import com.walletledger.walletbackend.config.FlexProperties;
+import com.walletledger.walletbackend.dto.enums.LedgerEntryType;
+import com.walletledger.walletbackend.dto.enums.NotificationSeverity;
+import com.walletledger.walletbackend.dto.enums.NotificationType;
+import com.walletledger.walletbackend.dto.enums.TransactionStatus;
+import com.walletledger.walletbackend.dto.enums.WalletStatus;
+import com.walletledger.walletbackend.entity.LedgerEntry;
+import com.walletledger.walletbackend.entity.Transaction;
+import com.walletledger.walletbackend.entity.Wallet;
+import com.walletledger.walletbackend.exception.BusinessRuleException;
+import com.walletledger.walletbackend.repository.LedgerEntryRepository;
+import com.walletledger.walletbackend.repository.SettlementBatchRepository;
+import com.walletledger.walletbackend.repository.TransactionRepository;
+import com.walletledger.walletbackend.repository.WalletRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class SettlementService {
+
+        private final TransactionRepository transactionRepository;
+        private final WalletRepository walletRepository;
+        private final LedgerEntryRepository ledgerEntryRepository;
+        private final NotificationService notificationService;
+        private final SettlementBatchRepository settlementBatchRepository;
+        private final WalletLockService walletLockService;
+        private final FlexService flexService;
+        private final FlexProperties flexProperties;
+
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public SettlementOutcome settle(Long transactionId, Long batchId) {
+<span class="fc" id="L44">                Transaction transaction = getTransactionForUpdate(transactionId);</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">                if (transaction.getStatus() != TransactionStatus.PENDING) {</span>
+<span class="fc" id="L46">                        return SettlementOutcome.SKIPPED;</span>
+                }
+<span class="fc" id="L48">                attachBatch(transaction, batchId);</span>
+
+                // Lock sender, receiver — and system wallet if Flex is enabled — in ascending
+                // order
+<span class="fc" id="L52">                Long senderId = transaction.getSenderWallet().getId();</span>
+<span class="fc" id="L53">                Long receiverId = transaction.getReceiverWallet().getId();</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">                Map&lt;Long, Wallet&gt; wallets = flexProperties.isEnabled()</span>
+<span class="fc" id="L55">                                ? walletLockService.lockInOrder(senderId, receiverId,</span>
+<span class="fc" id="L56">                                                flexProperties.getSystemWalletId())</span>
+<span class="fc" id="L57">                                : walletLockService.lockInOrder(senderId, receiverId);</span>
+
+<span class="fc" id="L59">                Wallet sender = wallets.get(senderId);</span>
+<span class="fc" id="L60">                Wallet receiver = wallets.get(receiverId);</span>
+
+<span class="fc bfc" id="L62" title="All 2 branches covered.">                if (receiver.getStatus() != WalletStatus.ACTIVE) {</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">                        Wallet systemWallet = flexProperties.isEnabled()</span>
+<span class="fc" id="L64">                                        ? wallets.get(flexProperties.getSystemWalletId())</span>
+<span class="fc" id="L65">                                        : null;</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">                        if (systemWallet != null) {</span>
+<span class="fc" id="L67">                                flexService.recoverOnFailure(transaction, receiver, systemWallet);</span>
+                        }
+<span class="fc" id="L69">                        refundAndClose(transaction, sender, TransactionStatus.DECLINED,</span>
+<span class="fc" id="L70">                                        &quot;Receiver wallet is &quot; + receiver.getStatus().name().toLowerCase());</span>
+<span class="fc" id="L71">                        return SettlementOutcome.DECLINED;</span>
+                }
+
+                // If Flex was used, repay system wallet instead of crediting receiver again
+<span class="fc bfc" id="L75" title="All 2 branches covered.">                if (flexProperties.isEnabled()) {</span>
+<span class="fc" id="L76">                        Wallet systemWallet = wallets.get(flexProperties.getSystemWalletId());</span>
+<span class="fc" id="L77">                        boolean flexRepaid = flexService.repayOnSettlement(transaction, systemWallet);</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">                        if (!flexRepaid) {</span>
+                                // No Flex — normal credit path with debt repayment if any
+<span class="fc" id="L80">                                creditReceiver(transaction, receiver);</span>
+                        }
+<span class="fc" id="L82">                } else {</span>
+<span class="fc" id="L83">                        creditReceiver(transaction, receiver);</span>
+                }
+
+<span class="fc" id="L86">                transaction.setStatus(TransactionStatus.SUCCESS);</span>
+<span class="fc" id="L87">                transaction.setSettledAt(OffsetDateTime.now());</span>
+<span class="fc" id="L88">                transactionRepository.save(transaction);</span>
+
+<span class="fc" id="L90">                notificationService.notifyUser(sender.getUser().getId(), NotificationType.TRANSFER_SETTLED,</span>
+<span class="fc" id="L91">                                NotificationSeverity.INFO, money(transaction.getAmount()) + &quot; transfer to &quot;</span>
+<span class="fc" id="L92">                                                + receiver.getUser().getName() + &quot; has settled&quot;,</span>
+<span class="fc" id="L93">                                transaction);</span>
+<span class="fc" id="L94">                notificationService.notifyUser(receiver.getUser().getId(), NotificationType.TRANSFER_RECEIVED,</span>
+<span class="fc" id="L95">                                NotificationSeverity.INFO, money(transaction.getAmount()) + &quot; received from &quot;</span>
+<span class="fc" id="L96">                                                + sender.getUser().getName(),</span>
+<span class="fc" id="L97">                                transaction);</span>
+<span class="fc" id="L98">                return SettlementOutcome.SETTLED;</span>
+        }
+
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public void fail(Long transactionId, String reason, Long batchId) {
+<span class="fc" id="L103">                Transaction transaction = getTransactionForUpdate(transactionId);</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">                if (transaction.getStatus() != TransactionStatus.PENDING)</span>
+<span class="fc" id="L105">                        return;</span>
+<span class="fc" id="L106">                attachBatch(transaction, batchId);</span>
+
+<span class="fc" id="L108">                Long senderId = transaction.getSenderWallet().getId();</span>
+<span class="fc" id="L109">                Long receiverId = transaction.getReceiverWallet().getId();</span>
+<span class="fc bfc" id="L110" title="All 2 branches covered.">                Map&lt;Long, Wallet&gt; wallets = flexProperties.isEnabled()</span>
+<span class="fc" id="L111">                                ? walletLockService.lockInOrder(senderId, receiverId,</span>
+<span class="fc" id="L112">                                                flexProperties.getSystemWalletId())</span>
+<span class="fc" id="L113">                                : walletLockService.lockInOrder(senderId);</span>
+
+<span class="fc" id="L115">                Wallet sender = wallets.get(senderId);</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">                if (flexProperties.isEnabled()) {</span>
+<span class="fc" id="L117">                        Wallet receiver = wallets.get(receiverId);</span>
+<span class="fc" id="L118">                        Wallet systemWallet = wallets.get(flexProperties.getSystemWalletId());</span>
+<span class="fc" id="L119">                        flexService.recoverOnFailure(transaction, receiver, systemWallet);</span>
+                }
+<span class="fc" id="L121">                refundAndClose(transaction, sender, TransactionStatus.FAILED, reason);</span>
+<span class="fc" id="L122">        }</span>
+
+        @Transactional
+        public void blockByAdmin(Long transactionId) {
+<span class="fc" id="L126">                Transaction transaction = getTransactionForUpdate(transactionId);</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">                if (transaction.getStatus() != TransactionStatus.PENDING) {</span>
+<span class="fc" id="L128">                        throw new BusinessRuleException(HttpStatus.CONFLICT,</span>
+<span class="fc" id="L129">                                        &quot;Transaction is already &quot; + transaction.getStatus()</span>
+                                                        + &quot; and can no longer be blocked&quot;);
+                }
+
+<span class="fc" id="L133">                Long senderId = transaction.getSenderWallet().getId();</span>
+<span class="fc" id="L134">                Long receiverId = transaction.getReceiverWallet().getId();</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">                Map&lt;Long, Wallet&gt; wallets = flexProperties.isEnabled()</span>
+<span class="fc" id="L136">                                ? walletLockService.lockInOrder(senderId, receiverId,</span>
+<span class="fc" id="L137">                                                flexProperties.getSystemWalletId())</span>
+<span class="fc" id="L138">                                : walletLockService.lockInOrder(senderId);</span>
+
+<span class="fc" id="L140">                Wallet sender = wallets.get(senderId);</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">                if (flexProperties.isEnabled()) {</span>
+<span class="fc" id="L142">                        Wallet receiver = wallets.get(receiverId);</span>
+<span class="fc" id="L143">                        Wallet systemWallet = wallets.get(flexProperties.getSystemWalletId());</span>
+<span class="fc" id="L144">                        flexService.recoverOnFailure(transaction, receiver, systemWallet);</span>
+                }
+<span class="fc" id="L146">                refundAndClose(transaction, sender, TransactionStatus.FAILED, &quot;Blocked by admin&quot;);</span>
+<span class="fc" id="L147">                notificationService.notifyUser(transaction.getReceiverWallet().getUser().getId(),</span>
+<span class="fc" id="L148">                                NotificationType.TRANSFER_FAILED, NotificationSeverity.INFO,</span>
+<span class="fc" id="L149">                                &quot;A transfer of &quot; + money(transaction.getAmount()) + &quot; to you was cancelled&quot;,</span>
+<span class="fc" id="L150">                                transaction);</span>
+<span class="fc" id="L151">        }</span>
+
+        // ── Private helpers ───────────────────────────────────────────────────────
+
+        private void creditReceiver(Transaction transaction, Wallet receiver) {
+<span class="fc" id="L156">                BigDecimal amount = transaction.getAmount();</span>
+
+                // Repay any flex debt from this inbound credit before crediting the remainder
+<span class="fc bfc" id="L159" title="All 2 branches covered.">                BigDecimal net = flexProperties.isEnabled()</span>
+<span class="fc" id="L160">                                ? flexService.repayDebtFromInbound(receiver, amount, transaction)</span>
+<span class="fc" id="L161">                                : amount;</span>
+
+<span class="fc" id="L163">                receiver.setBalance(receiver.getBalance().add(net));</span>
+<span class="fc" id="L164">                receiver.setUpdatedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L165">                walletRepository.save(receiver);</span>
+<span class="fc" id="L166">                saveLedger(transaction, receiver, LedgerEntryType.CREDIT, net, receiver.getBalance());</span>
+<span class="fc" id="L167">        }</span>
+
+        private void attachBatch(Transaction transaction, Long batchId) {
+<span class="fc bfc" id="L170" title="All 2 branches covered.">                if (batchId != null) {</span>
+<span class="fc" id="L171">                        transaction.setSettlementBatch(settlementBatchRepository.getReferenceById(batchId));</span>
+                }
+<span class="fc" id="L173">        }</span>
+
+        private Transaction getTransactionForUpdate(Long transactionId) {
+<span class="fc" id="L176">                return transactionRepository.findByIdForUpdate(transactionId)</span>
+<span class="fc" id="L177">                                .orElseThrow(() -&gt; new BusinessRuleException(HttpStatus.NOT_FOUND,</span>
+<span class="fc" id="L178">                                                &quot;Transaction not found&quot;));</span>
+        }
+
+        private void refundAndClose(Transaction transaction, Wallet sender,
+                        TransactionStatus status, String reason) {
+<span class="fc" id="L183">                sender.setBalance(sender.getBalance().add(transaction.getAmount()));</span>
+<span class="fc" id="L184">                if (transaction.getInitiatedAt().atZoneSameInstant(java.time.ZoneId.of(&quot;Asia/Kolkata&quot;)).toLocalDate()</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">                                .equals(WalletService.today())</span>
+<span class="pc bpc" id="L186" title="1 of 2 branches missed.">                                &amp;&amp; WalletService.today().equals(sender.getDailySpentDate())) {</span>
+<span class="fc" id="L187">                        BigDecimal remaining = sender.getDailySpent().subtract(transaction.getAmount());</span>
+<span class="pc bpc" id="L188" title="1 of 2 branches missed.">                        sender.setDailySpent(remaining.signum() &lt; 0 ? BigDecimal.ZERO : remaining);</span>
+                }
+<span class="fc" id="L190">                sender.setUpdatedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L191">                walletRepository.save(sender);</span>
+<span class="fc" id="L192">                saveLedger(transaction, sender, LedgerEntryType.REFUND, transaction.getAmount(), sender.getBalance());</span>
+
+<span class="fc" id="L194">                transaction.setStatus(status);</span>
+<span class="fc" id="L195">                transaction.setFailureReason(reason);</span>
+<span class="fc" id="L196">                transactionRepository.save(transaction);</span>
+
+<span class="fc" id="L198">                String recipientName = transaction.getReceiverWallet().getUser().getName();</span>
+<span class="fc bfc" id="L199" title="All 2 branches covered.">                NotificationType notificationType = status == TransactionStatus.DECLINED</span>
+<span class="fc" id="L200">                                ? NotificationType.TRANSFER_DECLINED</span>
+<span class="fc" id="L201">                                : NotificationType.TRANSFER_FAILED;</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">                String outcome = status == TransactionStatus.DECLINED ? &quot;was declined&quot; : &quot;failed&quot;;</span>
+<span class="fc" id="L203">                notificationService.notifyUser(sender.getUser().getId(), notificationType, NotificationSeverity.INFO,</span>
+<span class="fc" id="L204">                                money(transaction.getAmount()) + &quot; transfer to &quot; + recipientName + &quot; &quot; + outcome</span>
+                                                + &quot;. Amount refunded to your wallet&quot;,
+<span class="fc" id="L206">                                transaction);</span>
+<span class="fc" id="L207">        }</span>
+
+        private void saveLedger(Transaction transaction, Wallet wallet, LedgerEntryType type,
+                        BigDecimal amount, BigDecimal balanceAfter) {
+<span class="fc" id="L211">                LedgerEntry entry = new LedgerEntry();</span>
+<span class="fc" id="L212">                entry.setTransaction(transaction);</span>
+<span class="fc" id="L213">                entry.setWallet(wallet);</span>
+<span class="fc" id="L214">                entry.setEntryType(type);</span>
+<span class="fc" id="L215">                entry.setAmount(amount);</span>
+<span class="fc" id="L216">                entry.setBalanceAfter(balanceAfter);</span>
+<span class="fc" id="L217">                entry.setCreatedAt(OffsetDateTime.now());</span>
+<span class="fc" id="L218">                ledgerEntryRepository.save(entry);</span>
+<span class="fc" id="L219">        }</span>
+
+        private String money(BigDecimal amount) {
+<span class="fc" id="L222">                NumberFormat fmt = NumberFormat.getCurrencyInstance(Locale.forLanguageTag(&quot;en-IN&quot;));</span>
+<span class="fc" id="L223">                fmt.setMinimumFractionDigits(2);</span>
+<span class="fc" id="L224">                fmt.setMaximumFractionDigits(2);</span>
+<span class="fc" id="L225">                return fmt.format(amount);</span>
+        }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

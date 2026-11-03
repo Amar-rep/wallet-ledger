@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.walletledger.walletbackend.service.FraudAdminServiceTest
+-------------------------------------------------------------------------------
+Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.060 s -- in com.walletledger.walletbackend.service.FraudAdminServiceTest

@@ -5,9 +5,9 @@
 export function parseApiError(err) {
   const data = err?.response?.data
   const status = err?.response?.status
-  if (!data) return { message: err?.message || 'Something went wrong', fieldErrors: {}, status }
+  if (!data) return { message: 'Something went wrong. Please try again.', fieldErrors: {}, status }
   return {
-    message: data.message || `HTTP ${status}`,
+    message: data.message || 'Something went wrong. Please try again.',
     fieldErrors: data.fieldErrors || {},
     status,
   }

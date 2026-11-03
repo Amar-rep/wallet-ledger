@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowUpRight, ArrowDownLeft, Send, Plus, TrendingUp, TrendingDown, Calendar } from 'lucide-react'
+import { ArrowUpRight, ArrowDownLeft, Send, Plus, TrendingUp, TrendingDown, Calendar, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { walletApi } from '../api/wallet.js'
 import { transactionsApi } from '../api/transactions.js'
@@ -237,6 +237,40 @@ export default function HomePage() {
           <Send className="w-4 h-4" /> Send money
         </Button>
       </Link>
+
+      {/* Flex status banner — only show if wallet loaded */}
+      {wallet && (
+        <Link to="/flex" className="block">
+          <div className={`rounded-xl px-4 py-3 flex items-center gap-3 border transition-colors hover:opacity-90 ${
+            wallet.flexEnabled
+              ? 'bg-primary-50 border-primary-200'
+              : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+              wallet.flexEnabled ? 'bg-primary-100' : 'bg-slate-100'
+            }`}>
+              <Zap className={`w-4 h-4 ${wallet.flexEnabled ? 'text-primary-600' : 'text-slate-400'}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-800">
+                Flex Instant Credit
+                {wallet.flexEnabled
+                  ? <span className="ml-1.5 text-xs font-medium text-primary-600">Active</span>
+                  : <span className="ml-1.5 text-xs text-slate-400">Off</span>
+                }
+              </p>
+              <p className="text-xs text-slate-500">
+                {wallet.flexDebt > 0
+                  ? `Outstanding debt: ${formatINR(wallet.flexDebt)} — repaid from next inbound`
+                  : wallet.flexEnabled
+                  ? 'You receive eligible transfers instantly.'
+                  : 'Enable to receive transfers instantly.'}
+              </p>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          </div>
+        </Link>
+      )}
 
       {/* Mini statement */}
       <Card>

@@ -30,7 +30,9 @@ class JpaMappingConstraintTest {
             for (Field field : entity.getDeclaredFields()) {
                 Column column = field.getAnnotation(Column.class);
                 if (column != null) {
-                    assertTrue(column.nullable(), field.getName());
+                    if (!List.of("walletKind", "flexEnabled", "flexDebt").contains(field.getName())) {
+                        assertTrue(column.nullable(), field.getName());
+                    }
                     assertFalse(column.unique(), field.getName());
                     assertEquals(255, column.length(), field.getName());
                     assertEquals(0, column.precision(), field.getName());

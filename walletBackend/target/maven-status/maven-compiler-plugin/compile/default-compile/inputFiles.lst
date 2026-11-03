@@ -1,6 +1,10 @@
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\config\FlexConfigurationValidator.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\config\FlexProperties.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\config\SecurityConfig.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\controller\AdminController.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\controller\AuthController.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\controller\FlexAdminController.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\controller\FlexController.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\controller\NotificationController.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\controller\TransactionController.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\controller\TransferController.java
@@ -8,6 +12,7 @@ C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletled
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\common\ErrorResponse.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\common\MessageResponse.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\common\PageResponse.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\FlexCreditStatus.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\FraudAction.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\FraudAlertStatus.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\FraudAlertType.java
@@ -20,9 +25,11 @@ C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletled
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\TransactionStatusFilter.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\TransactionType.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\UserRole.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\WalletKind.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\enums\WalletStatus.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\request\AddMoneyRequest.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\request\AdminTransactionFilter.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\request\FlexWriteOffRequest.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\request\FraudReviewRequest.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\request\LoginRequest.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\request\RefreshTokenRequest.java
@@ -39,6 +46,7 @@ C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletled
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\DailySummaryResponse.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\DailyVolumePoint.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\DashboardResponse.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\FlexCreditResponse.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\FraudAlertResponse.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\JobRunResponse.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\LedgerEntryResponse.java
@@ -58,6 +66,7 @@ C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletled
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\dto\response\WalletResponse.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\entity\AuditLog.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\entity\DailySummary.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\entity\FlexCredit.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\entity\FraudAlert.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\entity\LedgerEntry.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\entity\LoginAttempt.java
@@ -73,6 +82,7 @@ C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletled
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\exception\InvalidTokenException.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\repository\AuditLogRepository.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\repository\DailySummaryRepository.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\repository\FlexCreditRepository.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\repository\FraudAlertRepository.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\repository\LedgerEntryRepository.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\repository\LoginAttemptRepository.java
@@ -96,8 +106,10 @@ C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletled
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\security\JwtAuthenticationFilter.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\security\JwtTokenProvider.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\AccountUnlockService.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\AdminService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\AuthService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\DailySummaryService.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\FlexService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\FraudAdminService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\NotificationQueryService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\NotificationService.java
@@ -105,5 +117,6 @@ C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletled
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\SettlementService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\TransactionHistoryService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\TransferService.java
+C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\WalletLockService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\service\WalletService.java
 C:\Users\caytm\Downloads\wallet-ledger\walletBackend\src\main\java\com\walletledger\walletbackend\WalletBackendApplication.java

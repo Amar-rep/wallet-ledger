@@ -121,7 +121,8 @@ export default function TransactionDetailPage() {
   }
 
   const isSent = txn.direction === 'SENT'
-  const showFailureReason = txn.status === 'FAILED' || txn.status === 'DECLINED'
+  const isTerminal = txn.status === 'FAILED' || txn.status === 'DECLINED'
+  const showFailureReason = isTerminal
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
@@ -165,7 +166,16 @@ export default function TransactionDetailPage() {
           <CopyButton value={txn.requestId} label="Request ID" />
         </DetailRow>
         <DetailRow label="Initiated">{formatDateTimeIST(txn.initiatedAt)}</DetailRow>
-        <DetailRow label="Settled">{txn.settledAt ? formatDateTimeIST(txn.settledAt) : <span className="text-slate-400">Pending</span>}</DetailRow>
+        {!isTerminal && txn.settlementDueDate && (
+          <DetailRow label="Settlement due">{formatDateOnly(txn.settlementDueDate)}</DetailRow>
+        )}
+        {!isTerminal && (
+          <DetailRow label="Settled">
+            {txn.settledAt
+              ? formatDateTimeIST(txn.settledAt)
+              : <span className="text-amber-600 font-normal">Pending</span>}
+          </DetailRow>
+        )}
       </Card>
 
       {/* Settlement timeline for PENDING */}

@@ -4,11 +4,6 @@ import java.math.BigDecimal;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/**
- * Flex Instant Credit feature configuration.
- * Bound from application.properties prefix "flex".
- * Registered via @EnableConfigurationProperties in WalletBackendApplication.
- */
 @ConfigurationProperties(prefix = "flex")
 public class FlexProperties {
 

@@ -44,22 +44,6 @@ public class FlexService {
 
     // ── Eligibility ────────────────────────────────────────────────────────────
 
-    /**
-     * Returns true only when ALL conditions are met:
-     * <ul>
-     * <li>Flex is globally enabled.</li>
-     * <li>The receiver has opted in.</li>
-     * <li>The receiver is ACTIVE.</li>
-     * <li>The receiver has no outstanding flex debt.</li>
-     * <li>The amount is within the configured max.</li>
-     * <li>The transfer is not flagged (or config allows flagged transfers).</li>
-     * <li>The system wallet has sufficient balance.</li>
-     * </ul>
-     *
-     * <p>
-     * Does NOT require the caller to hold any locks — this is a read-only
-     * pre-flight check. Locks are acquired inside {@link #disburse}.
-     */
     public boolean isEligible(Wallet receiverWallet, BigDecimal amount, boolean flagged) {
         if (!flexProperties.isEnabled())
             return false;
@@ -85,15 +69,6 @@ public class FlexService {
 
     // ── Disbursement ───────────────────────────────────────────────────────────
 
-    /**
-     * Immediately credits the receiver and debits the system wallet.
-     * Must be called within the same database transaction as transfer initiation.
-     *
-     * @param transaction    the PENDING transfer just created
-     * @param senderWallet   the sender's wallet (already saved and balanced)
-     * @param receiverWallet the receiver's wallet (not yet locked — lock acquired
-     *                       here)
-     */
     public void disburse(Transaction transaction, Wallet senderWallet, Wallet receiverWallet) {
         BigDecimal amount = transaction.getAmount();
 
@@ -144,17 +119,6 @@ public class FlexService {
 
     // ── Settlement repayment ───────────────────────────────────────────────────
 
-    /**
-     * Called when the original transfer settles successfully.
-     * Repays the system wallet with the held funds; does NOT credit the receiver
-     * again.
-     * Must be called within the same transaction as the settlement update.
-     *
-     * @param transaction  the transaction being settled
-     * @param systemWallet already-locked system wallet
-     * @return true if a Flex repayment was performed (caller must skip the normal
-     *         receiver credit)
-     */
     public boolean repayOnSettlement(Transaction transaction, Wallet systemWallet) {
         Optional<FlexCredit> opt = flexCreditRepository.findByTransactionIdForUpdate(transaction.getId());
         if (opt.isEmpty())
@@ -249,25 +213,6 @@ public class FlexService {
         }
     }
 
-    // ── Debt repayment from later inbound funds ────────────────────────────────
-
-    /**
-     * Intercepts an inbound credit to a wallet that has Flex debt.
-     * Repays the debt first; returns the remainder that should be credited to the
-     * customer.
-     *
-     * <p>
-     * Must be called within the same transaction as the inbound credit.
-     * The caller should credit ONLY the returned net amount, not the original
-     * amount.
-     *
-     * @param wallet         the receiving wallet (already locked)
-     * @param incomingAmount the gross incoming amount
-     * @param transaction    the transaction that carries the inbound credit (for
-     *                       ledger links)
-     * @return the net amount to credit to the customer wallet (incomingAmount minus
-     *         any debt repaid)
-     */
     public BigDecimal repayDebtFromInbound(Wallet wallet, BigDecimal incomingAmount, Transaction transaction) {
         BigDecimal debt = wallet.getFlexDebt() != null ? wallet.getFlexDebt() : BigDecimal.ZERO;
         if (debt.compareTo(BigDecimal.ZERO) == 0) {
@@ -316,9 +261,6 @@ public class FlexService {
 
     // ── Admin write-off ────────────────────────────────────────────────────────
 
-    /**
-     * Lists all flex credits, optionally filtered by status.
-     */
     public List<FlexCredit> list(FlexCreditStatus status) {
         if (status == null) {
             return flexCreditRepository.findAll();

@@ -1,6 +1,7 @@
 package com.walletledger.walletbackend.controller;
 
 import java.security.Principal;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -61,7 +62,7 @@ public class FlexController {
                                 fc.getWrittenOffBy());
         }
 
-        private java.time.Instant toInstant(OffsetDateTime v) {
+        private Instant toInstant(OffsetDateTime v) {
                 return v == null ? null : v.toInstant();
         }
 }

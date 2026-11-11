@@ -12,7 +12,7 @@ public class DailyLimitResetJob {
     private final JobRunner jobRunner;
     private final WalletRepository walletRepository;
 
-    @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 0 * * * *", zone = "Asia/Kolkata")
     public void run() {
         jobRunner.run("DAILY_LIMIT_RESET", entry -> new JobResult(walletRepository.resetDailySpent(), null));
     }
